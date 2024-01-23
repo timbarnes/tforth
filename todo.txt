@@ -1,0 +1,10 @@
+Tasks:
+
+Allow multi-line definitions by refactoring code with a compile flag.
+Improve the hash table dictionary to allow multiple definitions to be stored, with the latest current.
+Implement two branch words - conditional and unconditional - that take a number of cells to jump, forward or back. 
+Implement if/then/else semantics using the branch? and branch capability.
+Implement loops.
+Implement variables with stack references.
+Implement a file reader to input Forth code.
+Implement a file saver to write out the dictionary in a reloadable format.
