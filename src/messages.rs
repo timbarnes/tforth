@@ -1,3 +1,7 @@
+// Message handler
+
+use std::fmt::Debug;
+
 #[derive(Debug, Clone)]
 pub enum DebugLevel {
     No,
@@ -24,10 +28,10 @@ impl Msg {
         return self.debug_level.clone();
     }
 
-    pub fn info(&self, context: &str, text: String) {
+    pub fn info<T: Debug>(&self, context: &str, text: &str, val: T) {
         match self.debug_level {
             DebugLevel::Info => {
-                println!("INFO:{context}: {text}");
+                println!("INFO: {context}: {text}: {:?}", val);
             }
             _ => {
                 return;
@@ -35,14 +39,18 @@ impl Msg {
         }
     }
 
-    pub fn warning(&self, context: &str, text: String) {
+    pub fn warning<T: Debug>(&self, context: &str, text: &str, val: T) {
         match self.debug_level {
             DebugLevel::Warning | DebugLevel::Info => {
-                println!("WARNING:{context}: {text}");
+                println!("WARNING: {context}: {text}: {:?}", val);
             }
             _ => {
                 return;
             }
         }
+    }
+
+    pub fn error<T: Debug>(&self, context: &str, text: &str, val: T) {
+        println!("ERROR: {context}: {text}: {:?}", val);
     }
 }

@@ -36,15 +36,13 @@ fn main() {
         if let Err(_) = io::stdin().read_line(&mut input) {
             interpreter
                 .msg_handler
-                .warning("REPL", "Error - Reading input".to_owned());
+                .warning("REPL", "Error - Reading input", "Stdin");
             break;
         }
 
         if let Some((name, definition)) = interpreter.parse_word_definition(&input) {
             interpreter.define_word(&name, &definition);
-            interpreter
-                .msg_handler
-                .info("main", format!("Defined word: {}", name));
+            interpreter.msg_handler.info("main", "Defined word", name);
         } else {
             // Split the input into tokens
             let tokens: Vec<ForthToken> = input
@@ -65,9 +63,9 @@ fn main() {
         }
         interpreter
             .msg_handler
-            .info("main", format!("   Stack: {:?}", interpreter.stack));
+            .info("main", "   Stack", &interpreter.stack);
         interpreter
             .msg_handler
-            .info("main", format!("   Words: {:?}", interpreter.defined_words));
+            .info("main", "   Words", &interpreter.defined_words);
     }
 }

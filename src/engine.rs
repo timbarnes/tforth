@@ -42,7 +42,7 @@ impl ForthInterpreter {
 
     fn execute_operator(&mut self, operator: &str) {
         self.msg_handler
-            .info("execute_operator", format!("operator is {operator}"));
+            .info("execute_operator", "operator is", operator);
         match operator {
             "+" => {
                 if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
@@ -115,15 +115,14 @@ impl ForthInterpreter {
                     self.stack.push(*top);
                 } else {
                     self.msg_handler
-                        .warning("DUP", "Error - DUP: Stack is empty.".to_owned());
+                        .warning("DUP", "Error - DUP: Stack is empty.", "");
                 }
             }
             "drop" => {
                 if self.stack.len() > 0 {
                     self.stack.pop();
                 } else {
-                    self.msg_handler
-                        .warning("DROP", "Stack is empty.".to_owned());
+                    self.msg_handler.warning("DROP", "Stack is empty.", "");
                 }
             }
             "swap" => {
@@ -136,7 +135,7 @@ impl ForthInterpreter {
                     self.stack.push(b);
                 } else {
                     self.msg_handler
-                        .warning("DUP", "Too few elements on stack.".to_owned());
+                        .warning("DUP", "Too few elements on stack.", "");
                 }
             }
             "debuglevel" => match self.stack.pop() {
@@ -158,13 +157,10 @@ impl ForthInterpreter {
     }
 
     fn execute_tokens(&mut self, tokens: &[ForthToken]) {
-        self.msg_handler
-            .info("execute_tokens", format!("tokens: {:?}", tokens));
+        self.msg_handler.info("execute_tokens", "tokens", tokens);
         for token in tokens {
-            self.msg_handler.info(
-                "execute_tokens",
-                format!("...token is: {:?}, stack is {:?}", token, self.stack),
-            );
+            self.msg_handler
+                .info("execute_tokens", "...token and stack", token);
             match token {
                 ForthToken::Number(num) => self.stack.push(*num),
                 ForthToken::Operator(op) => self.execute_operator(&op),
@@ -174,11 +170,10 @@ impl ForthInterpreter {
 
     fn execute_word(&mut self, word: &str) {
         if let Some(tokens) = self.defined_words.clone().get(word) {
-            self.msg_handler
-                .info("execute_word", format!("tokens: {:?}", tokens));
+            self.msg_handler.info("execute_word", "tokens", tokens);
             self.execute_tokens(tokens);
         } else {
-            println!("Error - Unknown word: {}", word);
+            self.msg_handler.error("execute_word", "Unknown word", word);
         }
     }
 
@@ -193,10 +188,8 @@ impl ForthInterpreter {
 
     pub fn parse_word_definition(&self, input: &str) -> Option<(String, Vec<ForthToken>)> {
         // Compile a word
-        self.msg_handler.info(
-            "parse_word_definition",
-            format!("token vector: {:?}", input),
-        );
+        self.msg_handler
+            .info("parse_word_definition", "token vector", input);
         let mut iter = input.split_whitespace();
         if let Some(token) = iter.next() {
             if token == ":" {
