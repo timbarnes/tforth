@@ -138,6 +138,23 @@ impl ForthInterpreter {
                         .warning("DUP", "Too few elements on stack.", "");
                 }
             }
+            "words" => {
+                for (key, _) in self.defined_words.iter() {
+                    print!("{key} ");
+                }
+            }
+            "wordsee" => {
+                for (key, value) in self.defined_words.iter() {
+                    print!(": {key} ");
+                    for word in value {
+                        match word {
+                            ForthToken::Number(num) => print!("{num} "),
+                            ForthToken::Operator(op) => print!("{op} "),
+                        }
+                    }
+                    println!(";");
+                }
+            }
             "debuglevel" => match self.stack.pop() {
                 Some(0) => self.msg_handler.set_level(DebugLevel::No),
                 Some(1) => self.msg_handler.set_level(DebugLevel::Warning),

@@ -1,4 +1,4 @@
-Tokenizer implementation
+Compile mode implementation
 ========================
 
 Read from an input stream, default stdin, returning one token for each call.

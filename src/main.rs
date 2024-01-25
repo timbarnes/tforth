@@ -12,12 +12,12 @@ fn main() {
 
     interpreter.msg_handler.set_level(DebugLevel::No);
 
-    // Define some Forth words
-    interpreter.defined_words.insert(
-        String::from("double"),
-        vec![ForthToken::Number(2), ForthToken::Operator("*".to_string())],
-    );
-
+    /* // Define some Forth words
+       interpreter.defined_words.insert(
+           String::from("double"),
+           vec![ForthToken::Number(2), ForthToken::Operator("*".to_string())],
+       );
+    */
     println!("Welcome to Tforth, my first real Rust program!");
     println!("Message level is {:?}", interpreter.msg_handler.get_level());
 
