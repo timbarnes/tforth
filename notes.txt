@@ -1,10 +1,16 @@
 Compile mode implementation
 ========================
 
-Read from an input stream, default stdin, returning one token for each call.
-Read a line at a time, caching the line and only reading a new line when needed.
-
-struct Tokenizer {
-    filename: &str,
-    stream: 
-}
+Read a token
+If it's a ":"
+- set compile mode true
+- loop
+-   read the next token
+-   if it's a semicolon set compile mode false and break
+-   if it's a colon, error and break
+-   else push it on the definition vector
+- repeat
+- else (we're in execution mode)
+-   if it's a number, push it on the stack
+-   it it's a word, execute it
+- repeat

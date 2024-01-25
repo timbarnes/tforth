@@ -2,9 +2,10 @@ use std::io::{self, Write};
 
 mod engine;
 mod messages;
+mod tokenizer;
 mod utility;
 
-use engine::{ForthInterpreter, ForthToken};
+use engine::ForthInterpreter;
 use messages::DebugLevel;
 
 fn main() {
@@ -30,42 +31,51 @@ fn main() {
         print!("Ok ");
         io::stdout().flush().unwrap();
 
-        let mut input = String::new();
-
-        // Read a line from stdin
-        if let Err(_) = io::stdin().read_line(&mut input) {
+        // Process one word (in immediate mode), or one definition (compile mode).
+        if interpreter.process_item() {
             interpreter
                 .msg_handler
-                .warning("REPL", "Error - Reading input", "Stdin");
-            break;
-        }
-
-        if let Some((name, definition)) = interpreter.parse_word_definition(&input) {
-            interpreter.define_word(&name, &definition);
-            interpreter.msg_handler.info("main", "Defined word", name);
+                .info("main", "   Stack", &interpreter.stack);
+            interpreter
+                .msg_handler
+                .info("main", "   Words", &interpreter.defined_words);
         } else {
-            // Split the input into tokens
-            let tokens: Vec<ForthToken> = input
-                .split_whitespace()
-                .map(|token| {
-                    if utility::is_number(token) {
-                        ForthToken::Number(token.parse().unwrap())
-                    } else {
-                        ForthToken::Operator(token.to_string())
-                    }
-                })
-                .collect();
-
-            // Execute the Forth program
-            interpreter.execute(&tokens);
-
-            // Print the current stack
+            interpreter
+                .msg_handler
+                .info("main", "End of file", "Goodbye.");
         }
-        interpreter
-            .msg_handler
-            .info("main", "   Stack", &interpreter.stack);
-        interpreter
-            .msg_handler
-            .info("main", "   Words", &interpreter.defined_words);
     }
 }
+
+/*        let mut input = String::new();
+
+       // Read a line from stdin
+       if let Err(_) = io::stdin().read_line(&mut input) {
+           interpreter
+               .msg_handler
+               .warning("REPL", "Error - Reading input", "Stdin");
+           break;
+       }
+
+       if let Some((name, definition)) = interpreter.parse_word_definition(&input) {
+           interpreter.define_word(&name, &definition);
+           interpreter.msg_handler.info("main", "Defined word", name);
+       } else {
+           // Split the input into tokens
+           let tokens: Vec<ForthToken> = input
+               .split_whitespace()
+               .map(|token| {
+                   if utility::is_number(token) {
+                       ForthToken::Number(token.parse().unwrap())
+                   } else {
+                       ForthToken::Operator(token.to_string())
+                   }
+               })
+               .collect();
+
+           // Execute the Forth program
+           interpreter.execute(&tokens);
+
+           // Print the current stack
+       }
+*/

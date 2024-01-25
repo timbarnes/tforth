@@ -3,14 +3,19 @@
 use std::collections::HashMap;
 
 use crate::messages::{DebugLevel, Msg};
+use crate::tokenizer::Tokenizer;
 use crate::utility::is_number;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ForthInterpreter {
     pub stack: Vec<i32>, // the numeric stack, currently integers
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
-    pub exit_flag: bool,                                 // set when the "bye" word is executed.
+    compile_mode: bool,                                  // true if compiling a word
+    exit_flag: bool,                                     // set when the "bye" word is executed.
     pub msg_handler: Msg,
+    tokenizer: Tokenizer,
+    new_word_name: String,
+    new_word_definition: Vec<ForthToken>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,8 +30,12 @@ impl ForthInterpreter {
         ForthInterpreter {
             stack: Vec::new(),
             defined_words: HashMap::new(),
+            compile_mode: false,
             exit_flag: false,
             msg_handler: Msg::new(),
+            tokenizer: Tokenizer::new(None),
+            new_word_name: String::new(),
+            new_word_definition: Vec::new(),
         }
     }
 
@@ -38,6 +47,14 @@ impl ForthInterpreter {
     pub fn should_exit(&self) -> bool {
         // Method to determine if we should exit
         self.exit_flag
+    }
+
+    fn get_compile_mode(&self) -> bool {
+        self.compile_mode
+    }
+
+    fn set_compile_mode(&mut self, state: bool) {
+        self.compile_mode = state;
     }
 
     fn execute_operator(&mut self, operator: &str) {
@@ -171,6 +188,72 @@ impl ForthInterpreter {
                 self.execute_word(operator);
             }
         }
+    }
+
+    pub fn process_item(&mut self) -> bool {
+        // Process one immediate word, or a definition
+        let tok = self.tokenizer.get_token();
+        match tok {
+            Some(token) => {
+                if token == ":" {
+                    return self.process_definition();
+                } else {
+                    self.process_word(&token);
+                    return true;
+                }
+            }
+            None => false,
+        }
+    }
+
+    fn process_word(&mut self, token: &String) {
+        // Process a single word in immediate mode
+        if is_number(token) {
+            self.stack.push(token.parse().unwrap());
+        } else {
+            self.execute_operator(&token);
+        }
+    }
+
+    fn process_definition(&mut self) -> bool {
+        // Process the definition of a new word
+        self.set_compile_mode(true);
+        let name = self.tokenizer.get_token();
+        match name {
+            Some(name) => {
+                self.new_word_name = name;
+            }
+            None => {
+                self.msg_handler
+                    .error("process_definition", "Name not found", "");
+                return false;
+            }
+        }
+        loop {
+            // Loop over the definition
+            let tok = self.tokenizer.get_token();
+            match tok {
+                Some(token) => {
+                    if is_number(&token) {
+                        self.new_word_definition
+                            .push(ForthToken::Number(token.parse().unwrap()));
+                    } else if token != ";" {
+                        // ; is end of definition
+                        self.new_word_definition
+                            .push(ForthToken::Operator(token.to_string()));
+                    } else {
+                        break; // We found the end of the definition
+                    }
+                }
+                None => {
+                    return false;
+                }
+            }
+        }
+        self.defined_words
+            .insert(self.new_word_name.clone(), self.new_word_definition.clone());
+        self.set_compile_mode(false);
+        return true;
     }
 
     fn execute_tokens(&mut self, tokens: &[ForthToken]) {

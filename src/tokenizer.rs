@@ -3,23 +3,42 @@
 // Cache the remainder of the line.
 
 use std::collections::VecDeque;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 
+use crate::messages::{DebugLevel, Msg};
+
+#[derive(Debug)]
 enum TokenSource {
     Stdin,
     Stream(BufReader<File>),
 }
+
 pub struct Tokenizer {
     source: TokenSource,
     line: String,             // the text of the current line
     tokens: VecDeque<String>, // a vector of tokens, successively popped off until empty and a new line is read.
     success: bool, // Set to true if the Tokenizer was properly created. Fails on file errors
+    msg: Msg,
 }
 
-pub impl Tokenizer {
+impl fmt::Debug for Tokenizer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Tokenizer")
+            .field(&self.source)
+            .field(&self.line)
+            .field(&self.tokens)
+            .field(&self.success)
+            .finish()
+    }
+}
+
+impl Tokenizer {
     pub fn new(file_path: Option<&str>) -> Tokenizer {
         // Initialize a tokenizer.
+        let mut message_handler = Msg::new();
+        message_handler.set_level(DebugLevel::No);
         match file_path {
             None => {
                 return Tokenizer {
@@ -27,6 +46,7 @@ pub impl Tokenizer {
                     line: String::new(),
                     tokens: VecDeque::new(),
                     success: true,
+                    msg: message_handler,
                 }
             }
             Some(filepath) => {
@@ -38,16 +58,20 @@ pub impl Tokenizer {
                             line: String::new(),
                             tokens: VecDeque::new(),
                             success: true,
+                            msg: message_handler,
                         }
                     }
                     Err(_) => {
-                        println!("File not able to be opened: {:?}", file_path);
-                        return Tokenizer {
+                        let tkn = Tokenizer {
                             source: TokenSource::Stdin,
                             line: String::new(),
                             tokens: VecDeque::new(),
                             success: false,
+                            msg: message_handler,
                         };
+                        tkn.msg
+                            .error("Tokenizer::new", "File not able to be opened", file_path);
+                        return tkn;
                     }
                 }
             }
@@ -69,19 +93,19 @@ pub impl Tokenizer {
                 if let Err(_) = io::stdin().read_line(&mut self.line) {
                     return false;
                 } else {
-                    println!("Got some values: {:?}", self.line);
+                    self.msg.info("get_line", "Got some values", &self.line);
                     self.tokenize();
-                    println!("tokens are: {:?}", self.tokens);
+                    self.msg.info("get_line", "tokens are", &self.tokens);
                     return true;
                 }
             }
             TokenSource::Stream(ref mut file) => {
                 // Read from a file. TokenSource is a BufReader
-                println!("get_line reading from file");
+                self.msg.info("get_line", "Reading from file", "");
                 if let Err(_) = &file.read_line(&mut self.line) {
                     return false;
                 } else {
-                    println!("self.line: {:?}", self.line);
+                    self.msg.info("self.line", "Text was", &self.line);
                     return true;
                 }
             }
@@ -92,7 +116,6 @@ pub impl Tokenizer {
         // Tokenize the current line, returning true if successful
         // Only fails if the line is empty
         //
-        println!("tokenize");
         if self.line.is_empty() {
             return false;
         } else {
@@ -119,9 +142,9 @@ pub impl Tokenizer {
 
     pub fn get_token(&mut self) -> Option<String> {
         // Returns the next token from the stream, if there is one, otherwise None
-        println!("get_token");
         if self.tokens.is_empty() {
-            println!("no more tokens; need a new line");
+            self.msg
+                .info("get_token", "no more tokens; need a new line", "");
             if self.get_line() {
                 let t = self.tokens.pop_front();
                 match t {
@@ -133,7 +156,7 @@ pub impl Tokenizer {
                     }
                 }
             } else {
-                println!("unable to get new line");
+                self.msg.error("get_token", "unable to get new line", "");
                 return None;
             }
         } else {
