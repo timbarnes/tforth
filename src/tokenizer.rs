@@ -80,6 +80,7 @@ impl Tokenizer {
         let mut multiline = false; // to drive the prompt
         let mut token_type = TokenType::Blank;
         self.token_string.clear();
+        let mut chars_used = 0;
         'per_line: loop {
             // We explicitly break out when we have a complete token
             if self.line.is_empty() {
@@ -93,7 +94,6 @@ impl Tokenizer {
                     }
                 }
             }
-            let mut chars_used = 0;
             'scan: for c in self.line.chars() {
                 match token_type {
                     TokenType::Blank => {
@@ -137,10 +137,10 @@ impl Tokenizer {
                             '\n' => {
                                 // partial string is complete
                                 self.token_string.push(c);
-                                chars_used += 1;
+                                chars_used = 0;
                                 self.line.clear();
                                 multiline = true;
-                                break;
+                                break 'scan;
                             }
                             _ => {
                                 self.token_string.push(c);
@@ -150,7 +150,8 @@ impl Tokenizer {
                     }
                     TokenType::Executable => match c {
                         ' ' | '\n' => {
-                            break 'scan;
+                            chars_used += 1;
+                            break 'per_line;
                         }
                         _ => {
                             self.token_string.push(c);
@@ -160,14 +161,14 @@ impl Tokenizer {
                     },
                 }
             }
-            self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
-            self.msg.info(
-                "get_token_text",
-                "Token, type, line, chars_used",
-                (&token_type, &self.token_string, &self.line, chars_used),
-            );
-            return Some(token_type);
         }
+        self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
+        self.msg.info(
+            "get_token_text",
+            "Token, type, line, chars_used",
+            (&token_type, &self.token_string, &self.line, chars_used),
+        );
+
         return Some(token_type);
     }
 }

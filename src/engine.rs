@@ -102,6 +102,8 @@ impl ForthInterpreter {
                         .warning("compile_token", "Illegal inside definition", ":");
                 } else {
                     // push the new token onto the definition
+                    self.msg_handler
+                        .warning("compile_token", "Pushing", &self.token);
                     self.new_word_definition.push(self.token.clone());
                 }
             }
@@ -235,11 +237,11 @@ impl ForthInterpreter {
                             for word in value {
                                 match word {
                                     ForthToken::Number(num) => print!("{num} "),
-                                    ForthToken::Float(num) => println!("{num}"),
+                                    ForthToken::Float(num) => print!("{num} "),
                                     ForthToken::Operator(op) => print!("{op} "),
-                                    ForthToken::Comment(c) => println!("{c}"),
-                                    ForthToken::Text(txt) => println!("{txt}"),
-                                    ForthToken::Empty => println!("ForthToken::Empty"),
+                                    ForthToken::Comment(c) => print!("{c} "),
+                                    ForthToken::Text(txt) => print!("{txt} "),
+                                    ForthToken::Empty => print!("ForthToken::Empty "),
                                 }
                             }
                             println!(";");
