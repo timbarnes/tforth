@@ -8,11 +8,12 @@ use crate::utility;
 
 #[derive(Debug, Clone)]
 pub enum ForthToken {
-    Number(i32),      // the token is an integer, stored here
+    Integer(i64),     // the token is an integer, stored here
     Operator(String), // the token is an operator
     Text(String),     // the token is a text string
     Comment(String),  // an inline comment e.g. word stack signature
-    Float(f32),       // a floating point number
+    Float(f64),       // a floating point number
+    VarInt(String),   // the name of an integer variable (stored in the dictionary)
     Empty,            // the line was empty
 }
 
@@ -57,7 +58,7 @@ impl Tokenizer {
                     }
                     TokenType::Executable => {
                         if utility::is_integer(self.token_string.as_str()) {
-                            return Some(ForthToken::Number(self.token_string.parse().unwrap()));
+                            return Some(ForthToken::Integer(self.token_string.parse().unwrap()));
                         } else if utility::is_float(self.token_string.as_str()) {
                             return Some(ForthToken::Float(self.token_string.parse().unwrap()));
                         } else {
@@ -115,7 +116,6 @@ impl Tokenizer {
                             }
                             '\n' => {
                                 // We're finished
-                                multiline = false;
                                 self.line.clear();
                                 break 'per_line;
                             }
@@ -130,8 +130,7 @@ impl Tokenizer {
                         match c {
                             '\"' | ')' => {
                                 self.token_string.push(c);
-                                chars_used += 1; // so we can truncate the input line
-                                multiline = false;
+                                chars_used += 1;
                                 break 'per_line;
                             }
                             '\n' => {

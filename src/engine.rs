@@ -8,8 +8,9 @@ use crate::tokenizer::{ForthToken, Tokenizer};
 
 #[derive(Debug)]
 pub struct ForthInterpreter {
-    pub stack: Vec<i32>, // the numeric stack, currently integers
+    pub stack: Vec<i64>, // the numeric stack, currently integers
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
+    pub text: String,                                    // the current s".."" string
     compile_mode: bool,                                  // true if compiling a word
     exit_flag: bool,                                     // set when the "bye" word is executed.
     pub msg_handler: Msg,
@@ -25,6 +26,7 @@ impl ForthInterpreter {
         ForthInterpreter {
             stack: Vec::new(),
             defined_words: HashMap::new(),
+            text: String::new(),
             compile_mode: false,
             exit_flag: false,
             msg_handler: Msg::new(),
@@ -51,6 +53,15 @@ impl ForthInterpreter {
 
     fn set_compile_mode(&mut self, state: bool) {
         self.compile_mode = state;
+    }
+
+    fn stack_underflow(&self, op: &str, n: usize) -> bool {
+        if self.stack.len() < n {
+            self.msg_handler.error(op, "Stack underflow", "");
+            true
+        } else {
+            false
+        }
     }
 
     pub fn process_token(&mut self) -> bool {
@@ -119,42 +130,63 @@ impl ForthInterpreter {
         // Execute a defined token
         match &self.token {
             ForthToken::Empty => return false,
-            ForthToken::Number(num) => {
+            ForthToken::Integer(num) => {
                 self.stack.push(*num);
             }
             ForthToken::Float(_num) => {
                 // stack needs to support floats, ints, and pointers
                 // self.stack.push(num);
             }
-            ForthToken::Text(_txt) | ForthToken::Comment(_txt) => {
-                // stack needs to support floats, ints, and pointers
-                // self.stack.push(&text);
+            ForthToken::Text(txt) => {
+                // save the string
+                self.text = txt.clone();
+            }
+            ForthToken::VarInt(name) => {
+                self.msg_handler
+                    .warning("execute_token", "VarInt not implemented", name);
+            }
+            ForthToken::Comment(_txt) => {
+                () // skip over the comment
             }
             ForthToken::Operator(op) => {
                 match op.as_str() {
                     "+" => {
-                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                            self.stack.push(a + b);
+                        if self.stack_underflow("+", 2) {
+                            ()
+                        } else {
+                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                                self.stack.push(a + b);
+                            }
                         }
                     }
                     "-" => {
-                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                            self.stack.push(b - a);
+                        if self.stack_underflow("-", 2) {
+                            ()
+                        } else {
+                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                                self.stack.push(b - a);
+                            }
                         }
                     }
                     "*" => {
                         if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
                             self.stack.push(a * b);
+                        } else {
+                            self.msg_handler.error("*", "Stack Underflow", "")
                         }
                     }
                     "/" => {
                         if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
                             self.stack.push(b / a);
+                        } else {
+                            self.msg_handler.error("/", "Stack Underflow", "")
                         }
                     }
                     "." => {
                         if let Some(a) = self.stack.pop() {
                             println!("{a}");
+                        } else {
+                            self.msg_handler.error(".", "Stack Underflow", "")
                         }
                     }
                     "true" => {
@@ -164,36 +196,31 @@ impl ForthInterpreter {
                         self.stack.push(-1);
                     }
                     "=" => {
-                        if let Some(a) = self.stack.pop() {
-                            if let Some(b) = self.stack.pop() {
-                                if a == b {
-                                    self.stack.push(0)
-                                } else {
-                                    self.stack.push(-1);
+                        if self.stack_underflow("=", 2) {
+                            ()
+                        } else {
+                            if let Some(a) = self.stack.pop() {
+                                if let Some(b) = self.stack.pop() {
+                                    self.stack.push(if a == b { 0 } else { 1 });
                                 }
                             }
                         }
                     }
                     "0=" => {
                         if let Some(a) = self.stack.pop() {
-                            if a == 0 {
-                                self.stack.push(0)
-                            } else {
-                                self.stack.push(-1);
-                            }
+                            self.stack.push(if a == 0 { 0 } else { 1 });
                         }
                     }
                     "0<" => {
                         if let Some(a) = self.stack.pop() {
-                            if a < 0 {
-                                self.stack.push(0)
-                            } else {
-                                self.stack.push(-1);
-                            }
+                            self.stack.push(if a < 0 { 0 } else { 1 });
                         }
                     }
                     ".s" => {
                         println!("{:?}", self.stack);
+                    }
+                    ".\"" => {
+                        println!("{:?}", self.text);
                     }
                     "clear" => {
                         self.stack.clear();
@@ -236,11 +263,12 @@ impl ForthInterpreter {
                             print!(": {key} ");
                             for word in value {
                                 match word {
-                                    ForthToken::Number(num) => print!("{num} "),
-                                    ForthToken::Float(num) => print!("{num} "),
-                                    ForthToken::Operator(op) => print!("{op} "),
-                                    ForthToken::Comment(c) => print!("{c} "),
-                                    ForthToken::Text(txt) => print!("{txt} "),
+                                    ForthToken::Integer(num) => print!("int:{num} "),
+                                    ForthToken::Float(num) => print!("float:{num} "),
+                                    ForthToken::Operator(op) => print!("op:{op} "),
+                                    ForthToken::Comment(c) => print!("comment:{c} "),
+                                    ForthToken::Text(txt) => print!("text:{txt} "),
+                                    ForthToken::VarInt(txt) => print!("VarInt{txt}"),
                                     ForthToken::Empty => print!("ForthToken::Empty "),
                                 }
                             }
