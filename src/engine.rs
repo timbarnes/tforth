@@ -91,7 +91,10 @@ impl ForthInterpreter {
                     // we are at the end of the definition
                     self.defined_words
                         .insert(self.new_word_name.clone(), self.new_word_definition.clone());
-                } else if self.new_word_definition.is_empty() {
+                    self.new_word_name.clear();
+                    self.new_word_definition.clear();
+                    self.set_compile_mode(false);
+                } else if self.new_word_name.is_empty() {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
                 } else {
@@ -100,19 +103,8 @@ impl ForthInterpreter {
                 }
             }
             _ => {
-                // first thing after the : is the word name
-                if self.new_word_definition.is_empty() {
-                    // this is the word being defined
-                    match &self.token {
-                        ForthToken::Operator(name) => {
-                            self.new_word_name = name.clone();
-                        }
-                        _ => {
-                            // Text, integer, float, comment all go into the new word definition
-                            self.new_word_definition.push(self.token.clone());
-                        }
-                    }
-                }
+                // Text, integer, float, comment all go into the new word definition
+                self.new_word_definition.push(self.token.clone());
             }
         }
     }
@@ -120,8 +112,7 @@ impl ForthInterpreter {
     fn execute_token(&mut self) -> bool {
         // Immediate mode:
         // Execute a defined token
-        let tok = &self.token;
-        match tok {
+        match &self.token {
             ForthToken::Empty => return false,
             ForthToken::Number(num) => {
                 self.stack.push(*num);
@@ -262,8 +253,6 @@ impl ForthInterpreter {
                     ":" => {
                         // Enter compile mode
                         self.set_compile_mode(true);
-                        self.new_word_name = String::new();
-                        self.new_word_definition = Vec::new();
                     }
                     "bye" => {
                         self.set_exit_flag();
@@ -271,11 +260,37 @@ impl ForthInterpreter {
                     // Add more operators as needed
                     _ => {
                         // It must be a defined word
-                        self.process_token();
+                        self.execute_definition();
                     }
                 }
             }
         }
         return true;
+    }
+
+    fn execute_definition(&mut self) {
+        // execute a word defined in forth
+        // see if the word is in the dictionary.
+        // if so, iterate over the definition, using execute_token()
+        match &self.token {
+            ForthToken::Operator(word_name) => {
+                if self.defined_words.contains_key(word_name) {
+                    let definition = self.defined_words[word_name.as_str()].clone();
+                    for w in definition {
+                        self.token = w.clone();
+                        self.execute_token();
+                    }
+                } else {
+                    self.msg_handler
+                        .error("execute_definition", "Undefined word", &word_name);
+                    return;
+                }
+            }
+            _ => {
+                self.msg_handler
+                    .error("execute_definition", "Definition error", "");
+                return;
+            }
+        }
     }
 }
