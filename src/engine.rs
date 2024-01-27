@@ -97,6 +97,9 @@ impl ForthInterpreter {
                 } else if self.new_word_name.is_empty() {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
+                } else if tstring == ":" {
+                    self.msg_handler
+                        .warning("compile_token", "Illegal inside definition", ":");
                 } else {
                     // push the new token onto the definition
                     self.new_word_definition.push(self.token.clone());
