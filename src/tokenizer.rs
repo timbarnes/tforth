@@ -1,166 +1,173 @@
-// Read tokens from a file or stdin, one line at a time.
-// Return one space-delimited token at a time.
-// Cache the remainder of the line.
+// Parse a line of text, returning ForthTokens.
+// Use Reader::get_line() to get a line of text
+// Account for multi-line strings
 
-use std::collections::VecDeque;
-use std::fmt;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use crate::messages::Msg;
+use crate::reader::Reader;
+use crate::utility;
 
-use crate::messages::{DebugLevel, Msg};
-
-#[derive(Debug)]
-enum TokenSource {
-    Stdin,
-    Stream(BufReader<File>),
+#[derive(Debug, Clone)]
+pub enum ForthToken {
+    Number(i32),      // the token is an integer, stored here
+    Operator(String), // the token is an operator
+    Text(String),     // the token is a text string
+    Comment(String),  // an inline comment e.g. word stack signature
+    Float(f32),       // a floating point number
+    Empty,            // the line was empty
 }
 
+#[derive(Debug)]
+enum TokenType {
+    Blank,
+    Executable, // Words and numbers
+    Text,
+    Comment,
+}
+
+#[derive(Debug)]
 pub struct Tokenizer {
-    source: TokenSource,
-    line: String,             // the text of the current line
-    tokens: VecDeque<String>, // a vector of tokens, successively popped off until empty and a new line is read.
-    success: bool, // Set to true if the Tokenizer was properly created. Fails on file errors
+    line: String,
+    token_string: String,
+    reader: Reader,
     msg: Msg,
 }
 
-impl fmt::Debug for Tokenizer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Tokenizer")
-            .field(&self.source)
-            .field(&self.line)
-            .field(&self.tokens)
-            .field(&self.success)
-            .finish()
-    }
-}
-
 impl Tokenizer {
-    pub fn new(file_path: Option<&str>) -> Tokenizer {
-        // Initialize a tokenizer.
-        let mut message_handler = Msg::new();
-        message_handler.set_level(DebugLevel::No);
-        match file_path {
+    pub fn new(reader: Reader) -> Tokenizer {
+        Tokenizer {
+            line: String::new(),
+            token_string: String::new(),
+            reader: reader,
+            msg: Msg::new(),
+        }
+    }
+
+    pub fn get_token(&mut self) -> Option<ForthToken> {
+        // Return the token or None
+        // trim the token text off the front of self.line
+        let token_type = self.get_token_text();
+        match token_type {
+            Some(token_type) => {
+                match token_type {
+                    TokenType::Comment => {
+                        return Some(ForthToken::Comment(self.token_string.to_string()));
+                    }
+                    TokenType::Text => {
+                        return Some(ForthToken::Text(self.token_string.to_string()));
+                    }
+                    TokenType::Executable => {
+                        if utility::is_integer(self.token_string.as_str()) {
+                            return Some(ForthToken::Number(self.token_string.parse().unwrap()));
+                        } else if utility::is_float(self.token_string.as_str()) {
+                            return Some(ForthToken::Float(self.token_string.parse().unwrap()));
+                        } else {
+                            return Some(ForthToken::Operator(self.token_string.to_string()));
+                        }
+                    }
+                    TokenType::Blank => {
+                        return Some(ForthToken::Empty); // represents an empty line
+                    }
+                }
+            }
             None => {
-                return Tokenizer {
-                    source: TokenSource::Stdin,
-                    line: String::new(),
-                    tokens: VecDeque::new(),
-                    success: true,
-                    msg: message_handler,
-                }
-            }
-            Some(filepath) => {
-                let file = File::open(filepath);
-                match file {
-                    Ok(file) => {
-                        return Tokenizer {
-                            source: TokenSource::Stream(BufReader::new(file)),
-                            line: String::new(),
-                            tokens: VecDeque::new(),
-                            success: true,
-                            msg: message_handler,
-                        }
-                    }
-                    Err(_) => {
-                        let tkn = Tokenizer {
-                            source: TokenSource::Stdin,
-                            line: String::new(),
-                            tokens: VecDeque::new(),
-                            success: false,
-                            msg: message_handler,
-                        };
-                        tkn.msg
-                            .error("Tokenizer::new", "File not able to be opened", file_path);
-                        return tkn;
-                    }
-                }
+                return None;
             }
         }
     }
 
-    pub fn is_valid(&self) -> bool {
-        self.success
-    }
-
-    fn get_line(&mut self) -> bool {
-        // Read a line, storing it if there is one
-        // In interactive (stdin) mode, blocks until the user provides a line.
-        // Returns true if a line was read, false if not.
-        match self.source {
-            TokenSource::Stdin => {
-                // Read from stdin
-                self.line.clear();
-                if let Err(_) = io::stdin().read_line(&mut self.line) {
-                    return false;
-                } else {
-                    self.msg.info("get_line", "Got some values", &self.line);
-                    self.tokenize();
-                    self.msg.info("get_line", "tokens are", &self.tokens);
-                    return true;
-                }
-            }
-            TokenSource::Stream(ref mut file) => {
-                // Read from a file. TokenSource is a BufReader
-                self.msg.info("get_line", "Reading from file", "");
-                if let Err(_) = &file.read_line(&mut self.line) {
-                    return false;
-                } else {
-                    self.msg.info("self.line", "Text was", &self.line);
-                    return true;
-                }
-            }
-        }
-    }
-
-    fn tokenize(&mut self) -> bool {
-        // Tokenize the current line, returning true if successful
-        // Only fails if the line is empty
-        //
-        if self.line.is_empty() {
-            return false;
-        } else {
-            let mut inside_quotes = false;
-            let mut current_word = String::new();
-            for c in self.line.chars() {
-                match c {
-                    ' ' | '\n' if !inside_quotes => {
-                        if !current_word.is_empty() {
-                            self.tokens.push_back(current_word.clone());
-                            current_word.clear();
-                        }
+    fn get_token_text(&mut self) -> Option<TokenType> {
+        // Get the full text for a token, recursing if necessary for multiline tokens (text string or comment)
+        let mut multiline = false; // to drive the prompt
+        let mut token_type = TokenType::Blank;
+        self.token_string.clear();
+        'per_line: loop {
+            // We explicitly break out when we have a complete token
+            if self.line.is_empty() {
+                let line = self.reader.get_line(multiline);
+                match line {
+                    Some(line) => {
+                        self.line = line;
                     }
-                    '\"' => inside_quotes = !inside_quotes,
-                    _ => current_word.push(c),
-                }
-            }
-            if !current_word.is_empty() {
-                self.tokens.push_back(current_word);
-            }
-        }
-        self.tokens.len() > 0
-    }
-
-    pub fn get_token(&mut self) -> Option<String> {
-        // Returns the next token from the stream, if there is one, otherwise None
-        if self.tokens.is_empty() {
-            self.msg
-                .info("get_token", "no more tokens; need a new line", "");
-            if self.get_line() {
-                let t = self.tokens.pop_front();
-                match t {
-                    Some(t) => {
-                        return Some(t);
-                    }
-                    _ => {
+                    None => {
                         return None;
                     }
                 }
-            } else {
-                self.msg.error("get_token", "unable to get new line", "");
-                return None;
             }
-        } else {
-            return self.tokens.pop_front();
+            let mut chars_used = 0;
+            'scan: for c in self.line.chars() {
+                match token_type {
+                    TokenType::Blank => {
+                        match c {
+                            ' ' => {
+                                // skip over blanks
+                                chars_used += 1;
+                            }
+                            '\"' => {
+                                self.token_string.push(c); // save the quote
+                                token_type = TokenType::Text;
+                                chars_used += 1;
+                            }
+                            '(' => {
+                                self.token_string.push(c); // save the paren
+                                token_type = TokenType::Comment;
+
+                                chars_used += 1;
+                            }
+                            '\n' => {
+                                // We're finished
+                                multiline = false;
+                                self.line.clear();
+                                break 'per_line;
+                            }
+                            _ => {
+                                self.token_string.push(c);
+                                chars_used += 1;
+                                token_type = TokenType::Executable;
+                            }
+                        }
+                    }
+                    TokenType::Text | TokenType::Comment => {
+                        match c {
+                            '\"' | ')' => {
+                                self.token_string.push(c);
+                                chars_used += 1; // so we can truncate the input line
+                                multiline = false;
+                                break 'per_line;
+                            }
+                            '\n' => {
+                                // partial string is complete
+                                self.token_string.push(c);
+                                chars_used += 1;
+                                self.line.clear();
+                                multiline = true;
+                                break;
+                            }
+                            _ => {
+                                self.token_string.push(c);
+                                chars_used += 1;
+                            }
+                        }
+                    }
+                    TokenType::Executable => match c {
+                        ' ' | '\n' => {
+                            break 'scan;
+                        }
+                        _ => {
+                            self.token_string.push(c);
+                            chars_used += 1;
+                            multiline = false;
+                        }
+                    },
+                }
+            }
+            self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
+            self.msg.info(
+                "get_token_text",
+                "Token, type, line, chars_used",
+                (&token_type, &self.token_string, &self.line, chars_used),
+            );
+            return Some(token_type);
         }
+        return Some(token_type);
     }
 }

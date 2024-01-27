@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use crate::messages::{DebugLevel, Msg};
-use crate::tokenizer::Tokenizer;
-use crate::utility::is_number;
+use crate::reader::Reader;
+use crate::tokenizer::{ForthToken, Tokenizer};
 
 #[derive(Debug)]
 pub struct ForthInterpreter {
@@ -13,29 +13,25 @@ pub struct ForthInterpreter {
     compile_mode: bool,                                  // true if compiling a word
     exit_flag: bool,                                     // set when the "bye" word is executed.
     pub msg_handler: Msg,
-    tokenizer: Tokenizer,
+    parser: Tokenizer,
     new_word_name: String,
     new_word_definition: Vec<ForthToken>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ForthToken {
-    Number(i32),      // the token is an integer, stored here
-    Operator(String), // the token is an operator, hardcoded
+    token: ForthToken,
 }
 
 impl ForthInterpreter {
     // ForthInterpreter struct implementations
-    pub fn new() -> ForthInterpreter {
+    pub fn new(main_prompt: &str, multiline_prompt: &str) -> ForthInterpreter {
         ForthInterpreter {
             stack: Vec::new(),
             defined_words: HashMap::new(),
             compile_mode: false,
             exit_flag: false,
             msg_handler: Msg::new(),
-            tokenizer: Tokenizer::new(None),
+            parser: Tokenizer::new(Reader::new(None, main_prompt, multiline_prompt)),
             new_word_name: String::new(),
             new_word_definition: Vec::new(),
+            token: ForthToken::Empty,
         }
     }
 
@@ -49,7 +45,7 @@ impl ForthInterpreter {
         self.exit_flag
     }
 
-    fn get_compile_mode(&self) -> bool {
+    pub fn get_compile_mode(&self) -> bool {
         self.compile_mode
     }
 
@@ -57,259 +53,229 @@ impl ForthInterpreter {
         self.compile_mode = state;
     }
 
-    fn execute_operator(&mut self, operator: &str) {
-        self.msg_handler
-            .info("execute_operator", "operator is", operator);
-        match operator {
-            "+" => {
-                if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                    self.stack.push(a + b);
-                }
-            }
-            "-" => {
-                if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                    self.stack.push(b - a);
-                }
-            }
-            "*" => {
-                if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                    self.stack.push(a * b);
-                }
-            }
-            "/" => {
-                if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                    self.stack.push(b / a);
-                }
-            }
-            "." => {
-                if let Some(a) = self.stack.pop() {
-                    println!("{a}");
-                }
-            }
-            "true" => {
-                self.stack.push(0);
-            }
-            "false" => {
-                self.stack.push(-1);
-            }
-            "=" => {
-                if let Some(a) = self.stack.pop() {
-                    if let Some(b) = self.stack.pop() {
-                        if a == b {
-                            self.stack.push(0)
+    pub fn process_token(&mut self) -> bool {
+        let new_token = self.parser.get_token(); // Prompt if necessary, return a token
+        match new_token {
+            Some(new_token) => {
+                self.msg_handler
+                    .info("execute_token", "operator is", &self.token);
+                self.token = new_token;
+                match self.token {
+                    ForthToken::Empty => {
+                        return true; // An empty line
+                    }
+                    _ => {
+                        // Any valid token
+                        if self.get_compile_mode() {
+                            self.compile_token();
                         } else {
-                            self.stack.push(-1);
+                            // we're in immediate mode
+                            self.execute_token();
                         }
                     }
                 }
-            }
-            "0=" => {
-                if let Some(a) = self.stack.pop() {
-                    if a == 0 {
-                        self.stack.push(0)
-                    } else {
-                        self.stack.push(-1);
-                    }
-                }
-            }
-            "0<" => {
-                if let Some(a) = self.stack.pop() {
-                    if a < 0 {
-                        self.stack.push(0)
-                    } else {
-                        self.stack.push(-1);
-                    }
-                }
-            }
-            ".s" => {
-                println!("{:?}", self.stack);
-            }
-            "clear" => {
-                self.stack.clear();
-            }
-            "dup" => {
-                if let Some(top) = self.stack.last() {
-                    self.stack.push(*top);
-                } else {
-                    self.msg_handler
-                        .warning("DUP", "Error - DUP: Stack is empty.", "");
-                }
-            }
-            "drop" => {
-                if self.stack.len() > 0 {
-                    self.stack.pop();
-                } else {
-                    self.msg_handler.warning("DROP", "Stack is empty.", "");
-                }
-            }
-            "swap" => {
-                if self.stack.len() > 1 {
-                    let a = self.stack[self.stack.len() - 1];
-                    let b = self.stack[self.stack.len() - 2];
-                    self.stack.pop();
-                    self.stack.pop();
-                    self.stack.push(a);
-                    self.stack.push(b);
-                } else {
-                    self.msg_handler
-                        .warning("DUP", "Too few elements on stack.", "");
-                }
-            }
-            "words" => {
-                for (key, _) in self.defined_words.iter() {
-                    print!("{key} ");
-                }
-            }
-            "wordsee" => {
-                for (key, value) in self.defined_words.iter() {
-                    print!(": {key} ");
-                    for word in value {
-                        match word {
-                            ForthToken::Number(num) => print!("{num} "),
-                            ForthToken::Operator(op) => print!("{op} "),
-                        }
-                    }
-                    println!(";");
-                }
-            }
-            "debuglevel" => match self.stack.pop() {
-                Some(0) => self.msg_handler.set_level(DebugLevel::No),
-                Some(1) => self.msg_handler.set_level(DebugLevel::Warning),
-                _ => self.msg_handler.set_level(DebugLevel::Info),
-            },
-            "debuglevel?" => {
-                println!("DebugLevel is {:?}", self.msg_handler.get_level());
-            }
-            "bye" => {
-                self.set_exit_flag();
-            }
-            // Add more operators as needed
-            _ => {
-                self.execute_word(operator);
-            }
-        }
-    }
-
-    pub fn process_item(&mut self) -> bool {
-        // Process one immediate word, or a definition
-        let tok = self.tokenizer.get_token();
-        match tok {
-            Some(token) => {
-                if token == ":" {
-                    return self.process_definition();
-                } else {
-                    self.process_word(&token);
-                    return true;
-                }
-            }
-            None => false,
-        }
-    }
-
-    fn process_word(&mut self, token: &String) {
-        // Process a single word in immediate mode
-        if is_number(token) {
-            self.stack.push(token.parse().unwrap());
-        } else {
-            self.execute_operator(&token);
-        }
-    }
-
-    fn process_definition(&mut self) -> bool {
-        // Process the definition of a new word
-        self.set_compile_mode(true);
-        let name = self.tokenizer.get_token();
-        match name {
-            Some(name) => {
-                self.new_word_name = name;
+                return true;
             }
             None => {
-                self.msg_handler
-                    .error("process_definition", "Name not found", "");
                 return false;
             }
         }
-        loop {
-            // Loop over the definition
-            let tok = self.tokenizer.get_token();
-            match tok {
-                Some(token) => {
-                    if is_number(&token) {
-                        self.new_word_definition
-                            .push(ForthToken::Number(token.parse().unwrap()));
-                    } else if token != ";" {
-                        // ; is end of definition
-                        self.new_word_definition
-                            .push(ForthToken::Operator(token.to_string()));
-                    } else {
-                        break; // We found the end of the definition
-                    }
-                }
-                None => {
-                    return false;
+    }
+
+    fn compile_token(&mut self) {
+        // We're in compile mode: compile the new word
+        let tok = &self.token;
+        match tok {
+            ForthToken::Operator(tstring) => {
+                if tstring == ";" {
+                    // we are at the end of the definition
+                    self.defined_words
+                        .insert(self.new_word_name.clone(), self.new_word_definition.clone());
+                } else if self.new_word_definition.is_empty() {
+                    // We've found the word name
+                    self.new_word_name = tstring.to_string();
+                } else {
+                    // push the new token onto the definition
+                    self.new_word_definition.push(self.token.clone());
                 }
             }
-        }
-        self.defined_words
-            .insert(self.new_word_name.clone(), self.new_word_definition.clone());
-        self.set_compile_mode(false);
-        return true;
-    }
-
-    fn execute_tokens(&mut self, tokens: &[ForthToken]) {
-        self.msg_handler.info("execute_tokens", "tokens", tokens);
-        for token in tokens {
-            self.msg_handler
-                .info("execute_tokens", "...token and stack", token);
-            match token {
-                ForthToken::Number(num) => self.stack.push(*num),
-                ForthToken::Operator(op) => self.execute_operator(&op),
-            }
-        }
-    }
-
-    fn execute_word(&mut self, word: &str) {
-        if let Some(tokens) = self.defined_words.clone().get(word) {
-            self.msg_handler.info("execute_word", "tokens", tokens);
-            self.execute_tokens(tokens);
-        } else {
-            self.msg_handler.error("execute_word", "Unknown word", word);
-        }
-    }
-
-    pub fn execute(&mut self, tokens: &[ForthToken]) {
-        self.execute_tokens(tokens);
-    }
-
-    pub fn define_word(&mut self, name: &str, definition: &[ForthToken]) {
-        self.defined_words
-            .insert(name.to_string(), definition.to_vec());
-    }
-
-    pub fn parse_word_definition(&self, input: &str) -> Option<(String, Vec<ForthToken>)> {
-        // Compile a word
-        self.msg_handler
-            .info("parse_word_definition", "token vector", input);
-        let mut iter = input.split_whitespace();
-        if let Some(token) = iter.next() {
-            if token == ":" {
-                if let Some(name) = iter.next() {
-                    let mut definition = Vec::new();
-                    while let Some(token) = iter.next() {
-                        if token == ";" {
-                            return Some((name.to_string(), definition));
-                        } else {
-                            // Parse the token into ForthToken
-                            if is_number(token) {
-                                definition.push(ForthToken::Number(token.parse().unwrap()));
-                            } else {
-                                definition.push(ForthToken::Operator(token.to_string()));
-                            }
+            _ => {
+                // first thing after the : is the word name
+                if self.new_word_definition.is_empty() {
+                    // this is the word being defined
+                    match &self.token {
+                        ForthToken::Operator(name) => {
+                            self.new_word_name = name.clone();
+                        }
+                        _ => {
+                            // Text, integer, float, comment all go into the new word definition
+                            self.new_word_definition.push(self.token.clone());
                         }
                     }
                 }
             }
         }
-        None
+    }
+
+    fn execute_token(&mut self) -> bool {
+        // Immediate mode:
+        // Execute a defined token
+        let tok = &self.token;
+        match tok {
+            ForthToken::Empty => return false,
+            ForthToken::Number(num) => {
+                self.stack.push(*num);
+            }
+            ForthToken::Float(_num) => {
+                // stack needs to support floats, ints, and pointers
+                // self.stack.push(num);
+            }
+            ForthToken::Text(_txt) | ForthToken::Comment(_txt) => {
+                // stack needs to support floats, ints, and pointers
+                // self.stack.push(&text);
+            }
+            ForthToken::Operator(op) => {
+                match op.as_str() {
+                    "+" => {
+                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                            self.stack.push(a + b);
+                        }
+                    }
+                    "-" => {
+                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                            self.stack.push(b - a);
+                        }
+                    }
+                    "*" => {
+                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                            self.stack.push(a * b);
+                        }
+                    }
+                    "/" => {
+                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                            self.stack.push(b / a);
+                        }
+                    }
+                    "." => {
+                        if let Some(a) = self.stack.pop() {
+                            println!("{a}");
+                        }
+                    }
+                    "true" => {
+                        self.stack.push(0);
+                    }
+                    "false" => {
+                        self.stack.push(-1);
+                    }
+                    "=" => {
+                        if let Some(a) = self.stack.pop() {
+                            if let Some(b) = self.stack.pop() {
+                                if a == b {
+                                    self.stack.push(0)
+                                } else {
+                                    self.stack.push(-1);
+                                }
+                            }
+                        }
+                    }
+                    "0=" => {
+                        if let Some(a) = self.stack.pop() {
+                            if a == 0 {
+                                self.stack.push(0)
+                            } else {
+                                self.stack.push(-1);
+                            }
+                        }
+                    }
+                    "0<" => {
+                        if let Some(a) = self.stack.pop() {
+                            if a < 0 {
+                                self.stack.push(0)
+                            } else {
+                                self.stack.push(-1);
+                            }
+                        }
+                    }
+                    ".s" => {
+                        println!("{:?}", self.stack);
+                    }
+                    "clear" => {
+                        self.stack.clear();
+                    }
+                    "dup" => {
+                        if let Some(top) = self.stack.last() {
+                            self.stack.push(*top);
+                        } else {
+                            self.msg_handler
+                                .warning("DUP", "Error - DUP: Stack is empty.", "");
+                        }
+                    }
+                    "drop" => {
+                        if self.stack.len() > 0 {
+                            self.stack.pop();
+                        } else {
+                            self.msg_handler.warning("DROP", "Stack is empty.", "");
+                        }
+                    }
+                    "swap" => {
+                        if self.stack.len() > 1 {
+                            let a = self.stack[self.stack.len() - 1];
+                            let b = self.stack[self.stack.len() - 2];
+                            self.stack.pop();
+                            self.stack.pop();
+                            self.stack.push(a);
+                            self.stack.push(b);
+                        } else {
+                            self.msg_handler
+                                .warning("DUP", "Too few elements on stack.", "");
+                        }
+                    }
+                    "words" => {
+                        for (key, _) in self.defined_words.iter() {
+                            print!("{key} ");
+                        }
+                    }
+                    "wordsee" => {
+                        for (key, value) in self.defined_words.iter() {
+                            print!(": {key} ");
+                            for word in value {
+                                match word {
+                                    ForthToken::Number(num) => print!("{num} "),
+                                    ForthToken::Float(num) => println!("{num}"),
+                                    ForthToken::Operator(op) => print!("{op} "),
+                                    ForthToken::Comment(c) => println!("{c}"),
+                                    ForthToken::Text(txt) => println!("{txt}"),
+                                    ForthToken::Empty => println!("ForthToken::Empty"),
+                                }
+                            }
+                            println!(";");
+                        }
+                    }
+                    "debuglevel" => match self.stack.pop() {
+                        Some(0) => self.msg_handler.set_level(DebugLevel::No),
+                        Some(1) => self.msg_handler.set_level(DebugLevel::Warning),
+                        _ => self.msg_handler.set_level(DebugLevel::Info),
+                    },
+                    "debuglevel?" => {
+                        println!("DebugLevel is {:?}", self.msg_handler.get_level());
+                    }
+                    ":" => {
+                        // Enter compile mode
+                        self.set_compile_mode(true);
+                        self.new_word_name = String::new();
+                        self.new_word_definition = Vec::new();
+                    }
+                    "bye" => {
+                        self.set_exit_flag();
+                    }
+                    // Add more operators as needed
+                    _ => {
+                        // It must be a defined word
+                        self.process_token();
+                    }
+                }
+            }
+        }
+        return true;
     }
 }

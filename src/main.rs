@@ -1,7 +1,9 @@
-use std::io::{self, Write};
+// Tforth main program
+// Version 0.1
 
 mod engine;
 mod messages;
+mod reader;
 mod tokenizer;
 mod utility;
 
@@ -9,9 +11,9 @@ use engine::ForthInterpreter;
 use messages::DebugLevel;
 
 fn main() {
-    let mut interpreter = ForthInterpreter::new();
+    let mut interpreter = ForthInterpreter::new("Ok ", ">  ");
 
-    interpreter.msg_handler.set_level(DebugLevel::No);
+    interpreter.msg_handler.set_level(DebugLevel::Info);
 
     /* // Define some Forth words
        interpreter.defined_words.insert(
@@ -28,11 +30,9 @@ fn main() {
             println!("Thank you for using Tforth!");
             break;
         }
-        print!("Ok ");
-        io::stdout().flush().unwrap();
 
         // Process one word (in immediate mode), or one definition (compile mode).
-        if interpreter.process_item() {
+        if interpreter.process_token() {
             interpreter
                 .msg_handler
                 .info("main", "   Stack", &interpreter.stack);
@@ -40,42 +40,9 @@ fn main() {
                 .msg_handler
                 .info("main", "   Words", &interpreter.defined_words);
         } else {
-            interpreter
-                .msg_handler
-                .info("main", "End of file", "Goodbye.");
+            // Exit if EOF.
+            println!("End of File. Thank you for using Tforth!");
+            break;
         }
     }
 }
-
-/*        let mut input = String::new();
-
-       // Read a line from stdin
-       if let Err(_) = io::stdin().read_line(&mut input) {
-           interpreter
-               .msg_handler
-               .warning("REPL", "Error - Reading input", "Stdin");
-           break;
-       }
-
-       if let Some((name, definition)) = interpreter.parse_word_definition(&input) {
-           interpreter.define_word(&name, &definition);
-           interpreter.msg_handler.info("main", "Defined word", name);
-       } else {
-           // Split the input into tokens
-           let tokens: Vec<ForthToken> = input
-               .split_whitespace()
-               .map(|token| {
-                   if utility::is_number(token) {
-                       ForthToken::Number(token.parse().unwrap())
-                   } else {
-                       ForthToken::Operator(token.to_string())
-                   }
-               })
-               .collect();
-
-           // Execute the Forth program
-           interpreter.execute(&tokens);
-
-           // Print the current stack
-       }
-*/
