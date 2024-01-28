@@ -13,6 +13,7 @@ pub struct ForthInterpreter {
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
+    abort_flag: bool,   // true if abort has been called
     exit_flag: bool,    // set when the "bye" word is executed.
     pub msg_handler: Msg,
     parser: Tokenizer,
@@ -38,6 +39,7 @@ impl ForthInterpreter {
             text: String::new(),
             file_mode: FileMode::Unset,
             compile_mode: false,
+            abort_flag: false,
             exit_flag: false,
             msg_handler: Msg::new(),
             parser: Tokenizer::new(Reader::new(None, main_prompt, multiline_prompt)),
@@ -263,6 +265,14 @@ impl ForthInterpreter {
                                 .warning("DUP", "Too few elements on stack.", "");
                         }
                     }
+                    "abort" => {
+                        // empty the stack, reset any pending operations, and return to the prompt
+                        self.msg_handler
+                            .warning("abort", "Terminating execution", "");
+                        self.stack.clear();
+                        self.parser.clear();
+                        self.abort_flag = true;
+                    }
                     "words" => {
                         for (key, _) in self.defined_words.iter() {
                             print!("{key} ");
@@ -327,10 +337,16 @@ impl ForthInterpreter {
         match &self.token {
             ForthToken::Operator(word_name) => {
                 if self.defined_words.contains_key(word_name) {
-                    let definition = self.defined_words[word_name.as_str()].clone();
-                    for w in definition {
-                        self.token = w.clone();
-                        self.execute_token();
+                    let mut definition = self.defined_words[word_name.as_str()].clone();
+                    for w in &definition {
+                        if self.abort_flag {
+                            definition.clear();
+                            self.abort_flag = false;
+                            break;
+                        } else {
+                            self.token = w.clone();
+                            self.execute_token();
+                        }
                     }
                 } else {
                     self.msg_handler
@@ -353,5 +369,6 @@ impl ForthInterpreter {
             "Attempting to load file",
             (&self.text, &self.file_mode),
         );
+        // attempt to open the file, return an error if not possible
     }
 }

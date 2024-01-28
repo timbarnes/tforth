@@ -43,6 +43,11 @@ impl Tokenizer {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.line.clear();
+        self.token_string.clear();
+    }
+
     pub fn get_token(&mut self) -> Option<ForthToken> {
         // Return the token or None
         // trim the token text off the front of self.line
