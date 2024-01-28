@@ -13,7 +13,6 @@ pub struct ForthInterpreter {
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
-    compile_stack: (Vec<ForthToken>, i32),
     program_counter: usize,
     jumped: bool,
     abort_flag: bool, // true if abort has been called
@@ -42,7 +41,6 @@ impl ForthInterpreter {
             text: String::new(),
             file_mode: FileMode::Unset,
             compile_mode: false,
-            compile_stack: (Vec::new(), 0),
             program_counter: 0,
             jumped: false,
             abort_flag: false,
