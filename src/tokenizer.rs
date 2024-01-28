@@ -8,15 +8,39 @@ use crate::utility;
 
 #[derive(Debug, Clone)]
 pub enum ForthToken {
-    Integer(i64),     // the token is an integer, stored here
-    Operator(String), // the token is an operator
-    Text(String),     // the token is a text string
-    Comment(String),  // an inline comment e.g. word stack signature
-    Float(f64),       // a floating point number
-    VarInt(String),   // the name of an integer variable (stored in the dictionary)
-    Empty,            // the line was empty
+    Integer(i64),       // the token is an integer, stored here
+    Operator(String),   // the token is an operator
+    Branch(BranchInfo), // branch
+    Text(String),       // the token is a text string
+    Comment(String),    // an inline comment e.g. word stack signature
+    Float(f64),         // a floating point number
+    VarInt(String),     // the name of an integer variable (stored in the dictionary)
+    Empty,              // the line was empty
 }
 
+#[derive(Debug, Clone)]
+pub struct BranchInfo {
+    pub word: String,
+    pub offset: usize,
+    pub conditional: bool,
+}
+
+impl BranchInfo {
+    pub fn new(word: String, offset: usize, conditional: bool) -> BranchInfo {
+        BranchInfo {
+            word,
+            offset,
+            conditional,
+        }
+    }
+}
+
+/* #[derive(Debug, Clone)]
+pub enum BranchKind {
+    ZeroEqual,
+    Unconditional,
+}
+ */
 #[derive(Debug)]
 enum TokenType {
     Blank,
@@ -67,6 +91,18 @@ impl Tokenizer {
                         } else if utility::is_float(self.token_string.as_str()) {
                             return Some(ForthToken::Float(self.token_string.parse().unwrap()));
                         } else {
+                            if vec![
+                                "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
+                            ]
+                            .contains(&self.token_string.as_str())
+                            {
+                                return Some(ForthToken::Branch(BranchInfo::new(
+                                    self.token_string.to_string(),
+                                    0,     // default, will be corrected in calculate_branches
+                                    false, // default, will be corrected in calculate_branches
+                                )));
+                            } else {
+                            }
                             return Some(ForthToken::Operator(self.token_string.to_string()));
                         }
                     }

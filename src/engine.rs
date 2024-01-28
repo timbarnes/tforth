@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::messages::{DebugLevel, Msg};
 use crate::reader::Reader;
-use crate::tokenizer::{ForthToken, Tokenizer};
+use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
 
 #[derive(Debug)]
 pub struct ForthInterpreter {
@@ -13,8 +13,11 @@ pub struct ForthInterpreter {
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
-    abort_flag: bool,   // true if abort has been called
-    exit_flag: bool,    // set when the "bye" word is executed.
+    compile_stack: (Vec<ForthToken>, i32),
+    program_counter: usize,
+    jumped: bool,
+    abort_flag: bool, // true if abort has been called
+    exit_flag: bool,  // set when the "bye" word is executed.
     pub msg_handler: Msg,
     parser: Tokenizer,
     new_word_name: String,
@@ -39,6 +42,9 @@ impl ForthInterpreter {
             text: String::new(),
             file_mode: FileMode::Unset,
             compile_mode: false,
+            compile_stack: (Vec::new(), 0),
+            program_counter: 0,
+            jumped: false,
             abort_flag: false,
             exit_flag: false,
             msg_handler: Msg::new(),
@@ -112,6 +118,7 @@ impl ForthInterpreter {
             ForthToken::Operator(tstring) => {
                 if tstring == ";" {
                     // we are at the end of the definition
+                    self.calculate_branches();
                     self.defined_words
                         .insert(self.new_word_name.clone(), self.new_word_definition.clone());
                     self.new_word_name.clear();
@@ -137,6 +144,46 @@ impl ForthInterpreter {
         }
     }
 
+    fn calculate_branches(&mut self) {
+        // replace words that incorporate branches with ForthToken::Branch
+        // and set up offsets as required.
+        let mut branch_stack = Vec::<(&str, usize)>::new();
+        let mut idx = 0; // points to the current token
+        while idx < self.new_word_definition.len() {
+            let cur_token = &self.new_word_definition[idx];
+            match cur_token {
+                ForthToken::Branch(branch_info) => {
+                    match branch_info.word.as_str() {
+                        "if" => {
+                            // put the info on the stack
+                            branch_stack.push(("if", idx));
+                        }
+                        "else" => {
+                            // pop stack, insert new ZeroEqual Branch token with offset
+                            if let Some((_word, place)) = branch_stack.pop() {
+                                self.new_word_definition[place] = ForthToken::Branch(
+                                    BranchInfo::new("if".to_string(), idx - place, true),
+                                );
+                            }
+                            branch_stack.push(("else", idx));
+                        }
+                        "then" => {
+                            // pop stack, insert new Unconditional Branch token with offset
+                            if let Some((_word, place)) = branch_stack.pop() {
+                                self.new_word_definition[place] = ForthToken::Branch(
+                                    BranchInfo::new("else".to_string(), idx - place, true),
+                                );
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+                _ => (),
+            }
+            idx += 1;
+        }
+    }
+
     fn execute_token(&mut self) -> bool {
         // Immediate mode:
         // Execute a defined token
@@ -159,6 +206,34 @@ impl ForthInterpreter {
             }
             ForthToken::Comment(_txt) => {
                 () // skip over the comment
+            }
+            ForthToken::Branch(info) => {
+                match info.word.as_str() {
+                    // runtime semantics
+                    "if" => {
+                        if !self.stack_underflow("if", 1) {
+                            let b = self.stack.pop();
+                            if b.unwrap() != 0 {
+                                self.program_counter += info.offset;
+                                self.jumped = true;
+                            } else {
+                                self.jumped = false;
+                            }
+                        }
+                    }
+                    "else" => {
+                        if self.jumped {
+                            self.jumped = false
+                        } else {
+                            self.program_counter += info.offset;
+                            self.jumped = true;
+                        }
+                    }
+                    "then" => {
+                        self.jumped = false;
+                    }
+                    _ => (),
+                }
             }
             ForthToken::Operator(op) => {
                 match op.as_str() {
@@ -286,6 +361,12 @@ impl ForthInterpreter {
                                     ForthToken::Integer(num) => print!("int:{num} "),
                                     ForthToken::Float(num) => print!("float:{num} "),
                                     ForthToken::Operator(op) => print!("op:{op} "),
+                                    ForthToken::Branch(info) => {
+                                        print!(
+                                            "{:?}:{:?}:{:?}",
+                                            info.word, info.offset, info.conditional
+                                        );
+                                    }
                                     ForthToken::Comment(c) => print!("comment:{c} "),
                                     ForthToken::Text(txt) => print!("text:{txt} "),
                                     ForthToken::VarInt(txt) => print!("VarInt{txt}"),
@@ -338,13 +419,15 @@ impl ForthInterpreter {
             ForthToken::Operator(word_name) => {
                 if self.defined_words.contains_key(word_name) {
                     let mut definition = self.defined_words[word_name.as_str()].clone();
-                    for w in &definition {
+                    for _w in &definition {
+                        // replace with program counter approach
+                        self.program_counter = 0; // we're starting to execute a new word definition
                         if self.abort_flag {
                             definition.clear();
                             self.abort_flag = false;
                             break;
                         } else {
-                            self.token = w.clone();
+                            self.token = definition[self.program_counter].clone();
                             self.execute_token();
                         }
                     }
