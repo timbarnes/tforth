@@ -197,8 +197,8 @@ impl ForthInterpreter {
                 // self.stack.push(num);
             }
             ForthToken::Text(txt) => {
-                // save the string
-                self.text = txt.clone();
+                // save the string after removing the quotes and leading space
+                self.text = txt[2..txt.len() - 1].to_owned();
             }
             ForthToken::VarInt(name) => {
                 self.msg_handler
@@ -353,27 +353,21 @@ impl ForthInterpreter {
                             print!("{key} ");
                         }
                     }
-                    "wordsee" => {
-                        for (key, value) in self.defined_words.iter() {
-                            print!(": {key} ");
-                            for word in value {
-                                match word {
-                                    ForthToken::Integer(num) => print!("int:{num} "),
-                                    ForthToken::Float(num) => print!("float:{num} "),
-                                    ForthToken::Operator(op) => print!("op:{op} "),
-                                    ForthToken::Branch(info) => {
-                                        print!(
-                                            "{:?}:{:?}:{:?}",
-                                            info.word, info.offset, info.conditional
-                                        );
-                                    }
-                                    ForthToken::Comment(c) => print!("comment:{c} "),
-                                    ForthToken::Text(txt) => print!("text:{txt} "),
-                                    ForthToken::VarInt(txt) => print!("VarInt{txt}"),
-                                    ForthToken::Empty => print!("ForthToken::Empty "),
-                                }
+                    "seeall" => {
+                        for (key, definition) in self.defined_words.iter() {
+                            self.word_see(key, definition);
+                        }
+                    }
+                    "see" => {
+                        // ( "word name" -- ) print a word's definition
+                        match self.defined_words.get(self.text.as_str()) {
+                            Some(definition) => {
+                                self.word_see(self.text.as_str(), definition);
                             }
-                            println!(";");
+                            None => {
+                                self.msg_handler
+                                    .error("see", "Word not found", self.text.as_str());
+                            }
                         }
                     }
                     "r/w" => {
@@ -453,5 +447,24 @@ impl ForthInterpreter {
             (&self.text, &self.file_mode),
         );
         // attempt to open the file, return an error if not possible
+    }
+
+    fn word_see(&self, name: &str, definition: &Vec<ForthToken>) {
+        print!(": {name} ");
+        for word in definition {
+            match word {
+                ForthToken::Integer(num) => print!("{num} "),
+                ForthToken::Float(num) => print!("f{num} "),
+                ForthToken::Operator(op) => print!("{op} "),
+                ForthToken::Branch(info) => {
+                    print!("{}:{}:{} ", info.word, info.offset, info.conditional);
+                }
+                ForthToken::Comment(c) => print!("{c} "),
+                ForthToken::Text(txt) => print!("{txt} "),
+                ForthToken::VarInt(txt) => print!("{txt} "),
+                ForthToken::Empty => print!("ForthToken::Empty "),
+            }
+        }
+        println!(";");
     }
 }
