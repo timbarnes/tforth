@@ -10,14 +10,23 @@ use crate::tokenizer::{ForthToken, Tokenizer};
 pub struct ForthInterpreter {
     pub stack: Vec<i64>, // the numeric stack, currently integers
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
-    pub text: String,                                    // the current s".."" string
-    compile_mode: bool,                                  // true if compiling a word
-    exit_flag: bool,                                     // set when the "bye" word is executed.
+    text: String,                                        // the current s".."" string
+    file_mode: FileMode,
+    compile_mode: bool, // true if compiling a word
+    exit_flag: bool,    // set when the "bye" word is executed.
     pub msg_handler: Msg,
     parser: Tokenizer,
     new_word_name: String,
     new_word_definition: Vec<ForthToken>,
     token: ForthToken,
+}
+
+#[derive(Debug)]
+enum FileMode {
+    // used for file I/O
+    ReadWrite,
+    ReadOnly,
+    Unset,
 }
 
 impl ForthInterpreter {
@@ -27,6 +36,7 @@ impl ForthInterpreter {
             stack: Vec::new(),
             defined_words: HashMap::new(),
             text: String::new(),
+            file_mode: FileMode::Unset,
             compile_mode: false,
             exit_flag: false,
             msg_handler: Msg::new(),
@@ -275,6 +285,15 @@ impl ForthInterpreter {
                             println!(";");
                         }
                     }
+                    "r/w" => {
+                        self.file_mode = FileMode::ReadWrite;
+                    }
+                    "r/o" => {
+                        self.file_mode = FileMode::ReadOnly;
+                    }
+                    "loaded" => {
+                        self.loaded();
+                    }
                     "debuglevel" => match self.stack.pop() {
                         Some(0) => self.msg_handler.set_level(DebugLevel::No),
                         Some(1) => self.msg_handler.set_level(DebugLevel::Warning),
@@ -325,5 +344,14 @@ impl ForthInterpreter {
                 return;
             }
         }
+    }
+
+    fn loaded(&self) {
+        // Load a file of forth code
+        self.msg_handler.info(
+            "loaded",
+            "Attempting to load file",
+            (&self.text, &self.file_mode),
+        );
     }
 }
