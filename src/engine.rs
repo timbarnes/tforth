@@ -13,10 +13,8 @@ pub struct ForthInterpreter {
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
-    program_counter: usize,
-    jumped: bool,
-    abort_flag: bool, // true if abort has been called
-    exit_flag: bool,  // set when the "bye" word is executed.
+    abort_flag: bool,   // true if abort has been called
+    exit_flag: bool,    // set when the "bye" word is executed.
     pub msg_handler: Msg,
     parser: Tokenizer,
     new_word_name: String,
@@ -41,8 +39,6 @@ impl ForthInterpreter {
             text: String::new(),
             file_mode: FileMode::Unset,
             compile_mode: false,
-            program_counter: 0,
-            jumped: false,
             abort_flag: false,
             exit_flag: false,
             msg_handler: Msg::new(),
@@ -97,7 +93,7 @@ impl ForthInterpreter {
                             self.compile_token();
                         } else {
                             // we're in immediate mode
-                            self.execute_token();
+                            self.execute_token(0, false);
                         }
                     }
                 }
@@ -182,11 +178,11 @@ impl ForthInterpreter {
         }
     }
 
-    fn execute_token(&mut self) -> bool {
-        // Immediate mode:
+    fn execute_token(&mut self, mut program_counter: usize, mut jumped: bool) -> (usize, bool) {
         // Execute a defined token
+        program_counter += 1; // base assumption is we're processing one word
         match &self.token {
-            ForthToken::Empty => return false,
+            ForthToken::Empty => return (program_counter, false),
             ForthToken::Integer(num) => {
                 self.stack.push(*num);
             }
@@ -212,23 +208,23 @@ impl ForthInterpreter {
                         if !self.stack_underflow("if", 1) {
                             let b = self.stack.pop();
                             if b.unwrap() != 0 {
-                                self.program_counter += info.offset;
-                                self.jumped = true;
+                                program_counter += info.offset;
+                                jumped = true;
                             } else {
-                                self.jumped = false;
+                                jumped = false;
                             }
                         }
                     }
                     "else" => {
-                        if self.jumped {
-                            self.jumped = false
+                        if jumped {
+                            jumped = false
                         } else {
-                            self.program_counter += info.offset;
-                            self.jumped = true;
+                            program_counter += info.offset;
+                            jumped = true;
                         }
                     }
                     "then" => {
-                        self.jumped = false;
+                        jumped = false;
                     }
                     _ => (),
                 }
@@ -400,27 +396,27 @@ impl ForthInterpreter {
                 }
             }
         }
-        return true;
+        return (program_counter, jumped);
     }
 
     fn execute_definition(&mut self) {
         // execute a word defined in forth
         // see if the word is in the dictionary.
         // if so, iterate over the definition, using execute_token()
+        let mut program_counter: usize = 0;
+        let mut jumped = false;
         match &self.token {
             ForthToken::Operator(word_name) => {
                 if self.defined_words.contains_key(word_name) {
                     let mut definition = self.defined_words[word_name.as_str()].clone();
-                    for _w in &definition {
-                        // replace with program counter approach
-                        self.program_counter = 0; // we're starting to execute a new word definition
+                    while program_counter < definition.len() {
                         if self.abort_flag {
                             definition.clear();
                             self.abort_flag = false;
                             break;
                         } else {
-                            self.token = definition[self.program_counter].clone();
-                            self.execute_token();
+                            self.token = definition[program_counter].clone();
+                            (program_counter, jumped) = self.execute_token(program_counter, jumped);
                         }
                     }
                 } else {
