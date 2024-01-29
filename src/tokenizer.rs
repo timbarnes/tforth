@@ -161,6 +161,7 @@ impl Tokenizer {
                     token_string.push(c);
                     chars_used = 0;
                     multiline = true;
+                    self.line.clear();
                     break 'scan;
                 } else {
                     token_string.push(c);
