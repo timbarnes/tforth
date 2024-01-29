@@ -9,3 +9,8 @@
 : abs (n -- n | -n ) dup 0 < if -1 * then ;
 : false ( -- -1 ) 0 ;
 : true ( -- 0 ) -1 ;
+: debug 3 dbg ;
+: info 2 dbg ;
+: warning 1 dbg ;
+: quiet 0 dbg ;
+

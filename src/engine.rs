@@ -205,11 +205,12 @@ impl ForthInterpreter {
                 match info.word.as_str() {
                     "(" => {} // ignore comments
                     ".\"" => {
-                        print!("{}", info.tail);
+                        let tail = &info.tail[1..info.tail.len() - 2];
+                        println!("{}", tail);
                     }
                     "s\"" => {
                         let txt = &info.tail;
-                        self.text = info.tail[2..txt.len() - 1].to_owned();
+                        self.text = info.tail[1..txt.len() - 2].to_owned();
                     }
                     _ => (),
                 }
@@ -334,9 +335,11 @@ impl ForthInterpreter {
                         }
                     }
                     ".s" => {
+                        // print stack contents
                         println!("{:?}", self.stack);
                     }
-                    ".\"" => {
+                    ".s\"" => {
+                        // print the saved string
                         println!("{:?}", self.text);
                     }
                     "clear" => {

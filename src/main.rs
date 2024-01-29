@@ -18,7 +18,8 @@ fn main() {
     /* // Define some Forth words
        interpreter.defined_words.insert(
            String::from("double"),
-           vec![ForthToken::Number(2), ForthToken::Operator("*".to_string())],
+           vec![F
+           orthToken::Number(2), ForthToken::Operator("*".to_string())],
        );
     */
     println!("Welcome to tForth, my first real Rust program!");

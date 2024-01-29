@@ -114,20 +114,19 @@ impl Tokenizer {
                                 Some(remainder) => {
                                     return Some(ForthToken::Forward(ForwardInfo::new(
                                         text.to_owned(),
-                                        remainder,
+                                        format!("{remainder} {terminator}"),
                                     )));
                                 }
                                 None => {
                                     return Some(ForthToken::Forward(ForwardInfo::new(
                                         text.to_owned(),
-                                        "".to_string(),
+                                        "".to_owned(),
                                     )));
                                 }
                             }
                         }
-                        return Some(ForthToken::Operator(text.to_owned()));
                     }
-                    return None; // To satisfy the compiiler. We shouldn't ever get here.
+                    return Some(ForthToken::Operator(text.to_owned()));
                 }
             }
         }
@@ -155,7 +154,7 @@ impl Tokenizer {
             'scan: for c in self.line.chars() {
                 if terminator.contains(c) {
                     // We're done. We don't return the end_char as part of the string.
-                    self.line = self.line[chars_used..].to_string();
+                    self.line = self.line[chars_used + 1..].to_string();
                     return Some(token_string);
                 } else if c == '\n' {
                     // end of line, so break out and get another
@@ -184,7 +183,6 @@ impl Tokenizer {
                         "read a line of length",
                         format!("{:?}", self.line.len()),
                     );
-                    println!("New line is /{}/", self.line);
                 }
                 None => {
                     // Reader error
