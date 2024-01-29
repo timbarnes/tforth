@@ -53,7 +53,7 @@ enum TokenType {
 pub struct Tokenizer {
     line: String,
     token_string: String,
-    reader: Reader,
+    pub reader: Reader,
     msg: Msg,
 }
 
@@ -112,7 +112,7 @@ impl Tokenizer {
                 }
             }
             None => {
-                return None;
+                return None; // Signals end of file
             }
         }
     }
@@ -132,7 +132,7 @@ impl Tokenizer {
                         self.line = line;
                     }
                     None => {
-                        return None;
+                        return None; // Signals EOF
                     }
                 }
             }

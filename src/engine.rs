@@ -1,6 +1,7 @@
 //The Tforth interpreter struct and implementation
 
 use std::collections::HashMap;
+use std::fs::File;
 
 use crate::messages::{DebugLevel, Msg};
 use crate::reader::Reader;
@@ -33,19 +34,24 @@ enum FileMode {
 impl ForthInterpreter {
     // ForthInterpreter struct implementations
     pub fn new(main_prompt: &str, multiline_prompt: &str) -> ForthInterpreter {
-        ForthInterpreter {
-            stack: Vec::new(),
-            defined_words: HashMap::new(),
-            text: String::new(),
-            file_mode: FileMode::Unset,
-            compile_mode: false,
-            abort_flag: false,
-            exit_flag: false,
-            msg_handler: Msg::new(),
-            parser: Tokenizer::new(Reader::new(None, main_prompt, multiline_prompt)),
-            new_word_name: String::new(),
-            new_word_definition: Vec::new(),
-            token: ForthToken::Empty,
+        if let Some(reader) = Reader::new(None, main_prompt, multiline_prompt, Msg::new()) {
+            let parser = Tokenizer::new(reader);
+            ForthInterpreter {
+                stack: Vec::new(),
+                defined_words: HashMap::new(),
+                text: String::new(),
+                file_mode: FileMode::Unset,
+                compile_mode: false,
+                abort_flag: false,
+                exit_flag: false,
+                msg_handler: Msg::new(),
+                parser: parser,
+                new_word_name: String::new(),
+                new_word_definition: Vec::new(),
+                token: ForthToken::Empty,
+            }
+        } else {
+            panic!("unable to create reader");
         }
     }
 
@@ -100,7 +106,7 @@ impl ForthInterpreter {
                 return true;
             }
             None => {
-                return false;
+                return false; // Signals end of file
             }
         }
     }
@@ -127,7 +133,7 @@ impl ForthInterpreter {
                 } else {
                     // push the new token onto the definition
                     self.msg_handler
-                        .warning("compile_token", "Pushing", &self.token);
+                        .info("compile_token", "Pushing", &self.token);
                     self.new_word_definition.push(self.token.clone());
                 }
             }
@@ -433,14 +439,48 @@ impl ForthInterpreter {
         }
     }
 
-    fn loaded(&self) {
-        // Load a file of forth code
+    fn loaded(&mut self) {
+        // Load a file of forth code. Initial implementation is not intended to be recursive.
         self.msg_handler.info(
             "loaded",
             "Attempting to load file",
             (&self.text, &self.file_mode),
         );
         // attempt to open the file, return an error if not possible
+        let load_file = File::open(self.text.as_str());
+        match load_file {
+            Ok(_handle) => {
+                // success: read the file
+                // make a new reader (it will be swapped with self.parser.reader)
+                let reader = Reader::new(Some(self.text.as_str()), "", "", Msg::new());
+                match reader {
+                    Some(mut previous_reader) => {
+                        std::mem::swap(&mut previous_reader, &mut self.parser.reader);
+                        loop {
+                            if self.process_token() {
+                                self.msg_handler.warning("loaded", "processed", &self.token);
+                            } else {
+                                self.msg_handler
+                                    .warning("loaded", "No more tokens to read", "");
+                                break;
+                            }
+                        }
+                        std::mem::swap(&mut self.parser.reader, &mut previous_reader);
+                        return;
+                    }
+                    None => {
+                        self.abort_flag = true;
+                        self.msg_handler
+                            .error("loaded", "Failed to create new reader", "");
+                    }
+                }
+            }
+            Err(error) => {
+                self.msg_handler
+                    .error("loaded", error.to_string().as_str(), self.text.as_str());
+                self.abort_flag = true;
+            }
+        }
     }
 
     fn word_see(&self, name: &str, definition: &Vec<ForthToken>) {

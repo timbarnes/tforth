@@ -32,43 +32,40 @@ impl fmt::Debug for Reader {
 }
 
 impl Reader {
-    pub fn new(file_path: Option<&str>, prompt: &str, cont_prompt: &str) -> Reader {
+    pub fn new(
+        file_path: Option<&str>,
+        prompt: &str,
+        cont_prompt: &str,
+        msg_handler: Msg,
+    ) -> Option<Reader> {
         // Initialize a tokenizer.
         let mut message_handler = Msg::new();
         message_handler.set_level(DebugLevel::No);
         match file_path {
             None => {
-                return Reader {
+                return Some(Reader {
                     source: Source::Stdin,
                     line: String::new(),
                     prompt: prompt.to_owned(),
                     cont_prompt: cont_prompt.to_owned(),
-                    msg: message_handler,
-                }
+                    msg: msg_handler,
+                });
             }
             Some(filepath) => {
                 let file = File::open(filepath);
                 match file {
                     Ok(file) => {
-                        return Reader {
+                        return Some(Reader {
                             source: Source::Stream(BufReader::new(file)),
                             line: String::new(),
                             prompt: prompt.to_owned(),
                             cont_prompt: cont_prompt.to_owned(),
-                            msg: message_handler,
-                        }
+                            msg: msg_handler,
+                        });
                     }
                     Err(_) => {
-                        let tkn = Reader {
-                            source: Source::Stdin,
-                            line: String::new(),
-                            prompt: prompt.to_owned(),
-                            cont_prompt: cont_prompt.to_owned(),
-                            msg: message_handler,
-                        };
-                        tkn.msg
-                            .error("Reader::new", "File not able to be opened", file_path);
-                        return tkn;
+                        msg_handler.error("Reader::new", "File not able to be opened", file_path);
+                        return None;
                     }
                 }
             }
@@ -94,17 +91,24 @@ impl Reader {
                     return None;
                 } else {
                     self.msg.info("get_line", "Got some values", &self.line);
+
                     return Some(self.line.clone());
                 }
             }
             Source::Stream(ref mut file) => {
                 // Read from a file. TokenSource is a BufReader. No prompts
                 self.msg.info("get_line", "Reading from file", "");
-                if let Err(_) = &file.read_line(&mut self.line) {
-                    return None;
-                } else {
-                    self.msg.info("self.line", "Text was", &self.line);
-                    return Some(self.line.clone());
+                self.line.clear();
+                let chars_read = &file.read_line(&mut self.line);
+                match chars_read {
+                    Ok(chars) => {
+                        if *chars > 0 {
+                            return Some(self.line.clone());
+                        } else {
+                            return None;
+                        }
+                    }
+                    Err(_) => return None,
                 }
             }
         }
