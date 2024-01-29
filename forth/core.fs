@@ -6,3 +6,6 @@
 : <> (n -- n ) = 0= ;
 : min ( m n -- m | n ) 2dup < if drop else nip then ;
 : max ( m n -- m | n ) 2dup > if drop else nip then ;
+: abs (n -- n | -n ) dup 0 < if -1 * then ;
+: false ( -- -1 ) 0 ;
+: true ( -- 0 ) -1 ;

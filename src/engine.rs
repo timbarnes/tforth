@@ -213,7 +213,7 @@ impl ForthInterpreter {
                     "if" => {
                         if !self.stack_underflow("if", 1) {
                             let b = self.stack.pop();
-                            if b.unwrap() != 0 {
+                            if b.unwrap() == 0 {
                                 program_counter += info.offset;
                                 jumped = true;
                             } else {
@@ -275,9 +275,9 @@ impl ForthInterpreter {
                         } else {
                             let l = self.stack.len() - 1;
                             let result = if self.stack[l - 1] < self.stack[l] {
-                                0
-                            } else {
                                 -1
+                            } else {
+                                0
                             };
                             self.stack.pop();
                             self.stack.pop();
@@ -303,7 +303,7 @@ impl ForthInterpreter {
                         } else {
                             if let Some(a) = self.stack.pop() {
                                 if let Some(b) = self.stack.pop() {
-                                    self.stack.push(if a == b { 0 } else { 1 });
+                                    self.stack.push(if a == b { -1 } else { 0 });
                                 }
                             }
                         }
@@ -315,7 +315,7 @@ impl ForthInterpreter {
                     }
                     "0<" => {
                         if let Some(a) = self.stack.pop() {
-                            self.stack.push(if a < 0 { 0 } else { 1 });
+                            self.stack.push(if a < 0 { -1 } else { 0 });
                         }
                     }
                     ".s" => {
