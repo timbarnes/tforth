@@ -87,7 +87,7 @@ impl ForthInterpreter {
         match new_token {
             Some(new_token) => {
                 self.msg_handler
-                    .info("execute_token", "operator is", &self.token);
+                    .debug("execute_token", "operator is", &self.token);
                 self.token = new_token;
                 match self.token {
                     ForthToken::Empty => {
@@ -133,7 +133,7 @@ impl ForthInterpreter {
                 } else {
                     // push the new token onto the definition
                     self.msg_handler
-                        .info("compile_token", "Pushing", &self.token);
+                        .debug("compile_token", "Pushing", &self.token);
                     self.new_word_definition.push(self.token.clone());
                 }
             }
@@ -169,9 +169,9 @@ impl ForthInterpreter {
                         }
                         "then" => {
                             // pop stack, insert new Unconditional Branch token with offset
-                            if let Some((_word, place)) = branch_stack.pop() {
+                            if let Some((word, place)) = branch_stack.pop() {
                                 self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new("else".to_string(), idx - place, true),
+                                    BranchInfo::new(word.to_string(), idx - place, true),
                                 );
                             }
                         }
@@ -422,10 +422,11 @@ impl ForthInterpreter {
                     "loaded" => {
                         self.loaded();
                     }
-                    "debuglevel" => match self.stack.pop() {
-                        Some(0) => self.msg_handler.set_level(DebugLevel::No),
-                        Some(1) => self.msg_handler.set_level(DebugLevel::Warning),
-                        _ => self.msg_handler.set_level(DebugLevel::Info),
+                    "dbg" => match self.stack.pop() {
+                        Some(0) => self.msg_handler.set_level(DebugLevel::Errors),
+                        Some(1) => self.msg_handler.set_level(DebugLevel::Warnings),
+                        Some(2) => self.msg_handler.set_level(DebugLevel::Info),
+                        _ => self.msg_handler.set_level(DebugLevel::Debug),
                     },
                     "debuglevel?" => {
                         println!("DebugLevel is {:?}", self.msg_handler.get_level());
@@ -484,16 +485,14 @@ impl ForthInterpreter {
 
     fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
-        self.msg_handler.info(
-            "loaded",
-            "Attempting to load file",
-            (&self.text, &self.file_mode),
-        );
         // attempt to open the file, return an error if not possible
         let load_file = File::open(self.text.as_str());
         match load_file {
             Ok(_handle) => {
                 // success: read the file
+                self.msg_handler
+                    .info("loaded", "Loading file", (&self.text, &self.file_mode));
+
                 // make a new reader (it will be swapped with self.parser.reader)
                 let reader = Reader::new(Some(self.text.as_str()), "", "", Msg::new());
                 match reader {

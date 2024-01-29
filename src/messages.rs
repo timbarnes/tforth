@@ -4,9 +4,10 @@ use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub enum DebugLevel {
-    No,
-    Warning,
+    Errors,
+    Warnings,
     Info,
+    Debug,
 }
 
 #[derive(Debug, Clone)]
@@ -17,7 +18,7 @@ pub struct Msg {
 impl Msg {
     pub fn new() -> Msg {
         Msg {
-            debug_level: DebugLevel::No,
+            debug_level: DebugLevel::Errors,
         }
     }
     pub fn set_level(&mut self, lev: DebugLevel) {
@@ -28,9 +29,20 @@ impl Msg {
         return self.debug_level.clone();
     }
 
+    pub fn debug<T: Debug>(&self, context: &str, text: &str, val: T) {
+        match self.debug_level {
+            DebugLevel::Debug => {
+                println!("DEBUG: {context}: {text}: {:?}", val);
+            }
+            _ => {
+                return;
+            }
+        }
+    }
+
     pub fn info<T: Debug>(&self, context: &str, text: &str, val: T) {
         match self.debug_level {
-            DebugLevel::Info => {
+            DebugLevel::Info | DebugLevel::Debug => {
                 println!("INFO: {context}: {text}: {:?}", val);
             }
             _ => {
@@ -41,7 +53,7 @@ impl Msg {
 
     pub fn warning<T: Debug>(&self, context: &str, text: &str, val: T) {
         match self.debug_level {
-            DebugLevel::Warning | DebugLevel::Info => {
+            DebugLevel::Warnings | DebugLevel::Info | DebugLevel::Debug => {
                 println!("WARNING: {context}: {text}: {:?}", val);
             }
             _ => {

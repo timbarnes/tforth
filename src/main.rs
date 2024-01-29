@@ -13,7 +13,7 @@ use messages::DebugLevel;
 fn main() {
     let mut interpreter = ForthInterpreter::new("Ok ", ">  ");
 
-    interpreter.msg_handler.set_level(DebugLevel::Warning);
+    interpreter.msg_handler.set_level(DebugLevel::Warnings);
 
     /* // Define some Forth words
        interpreter.defined_words.insert(
@@ -21,7 +21,7 @@ fn main() {
            vec![ForthToken::Number(2), ForthToken::Operator("*".to_string())],
        );
     */
-    println!("Welcome to Tforth, my first real Rust program!");
+    println!("Welcome to tForth, my first real Rust program!");
     println!("Message level is {:?}", interpreter.msg_handler.get_level());
 
     // Enter the interactive loop to read and process input
@@ -35,13 +35,13 @@ fn main() {
         if interpreter.process_token() {
             interpreter
                 .msg_handler
-                .info("main", "   Stack", &interpreter.stack);
+                .debug("main", "   Stack", &interpreter.stack);
             interpreter
                 .msg_handler
-                .info("main", "   Words", &interpreter.defined_words);
+                .debug("main", "   Words", &interpreter.defined_words);
         } else {
             // Exit if EOF.
-            println!("End of File. Thank you for using Tforth!");
+            println!("End of File. Thank you for using tForth!");
             break;
         }
     }
