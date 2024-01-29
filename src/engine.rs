@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::io::{self, Write};
 
 use crate::messages::{DebugLevel, Msg};
 use crate::reader::Reader;
@@ -341,6 +342,26 @@ impl ForthInterpreter {
                     ".s\"" => {
                         // print the saved string
                         println!("{:?}", self.text);
+                    }
+                    "echo" => {
+                        if !self.stack_underflow("echo", 1) {
+                            let n = self.stack.pop();
+                            match n {
+                                Some(n) => {
+                                    if n > 0 && n < 128 {
+                                        let c = n as u8 as char;
+                                        print!("{}", c);
+                                    } else {
+                                        self.msg_handler.error("ECHO", "Arg out of range", n);
+                                    }
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                    "flush" => {
+                        // flush the stdout buffer to the terminal
+                        io::stdout().flush().unwrap();
                     }
                     "clear" => {
                         self.stack.clear();
