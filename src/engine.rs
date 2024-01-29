@@ -196,16 +196,31 @@ impl ForthInterpreter {
                 // stack needs to support floats, ints, and pointers
                 // self.stack.push(num);
             }
-            ForthToken::Text(txt) => {
-                // save the string after removing the quotes and leading space
-                self.text = txt[2..txt.len() - 1].to_owned();
-            }
             ForthToken::VarInt(name) => {
                 self.msg_handler
                     .warning("execute_token", "VarInt not implemented", name);
             }
-            ForthToken::Comment(_txt) => {
-                () // skip over the comment
+            ForthToken::Forward(info) => {
+                // need a better way to capture forward and branch types' unique behaviors
+                match info.word.as_str() {
+                    "(" => {} // ignore comments
+                    ".\"" => {
+                        print!("{}", info.tail);
+                    }
+                    "s\"" => {
+                        let txt = &info.tail;
+                        self.text = info.tail[2..txt.len() - 1].to_owned();
+                    }
+                    _ => (),
+                }
+            }
+            ForthToken::Text(txt) | ForthToken::Comment(txt) => {
+                self.msg_handler.error(
+                    "execute_token",
+                    "Should not have Text or Comment tokens",
+                    txt.as_str(),
+                );
+                self.abort_flag = true;
             }
             ForthToken::Branch(info) => {
                 match info.word.as_str() {
@@ -534,6 +549,9 @@ impl ForthInterpreter {
                 ForthToken::Operator(op) => print!("{op} "),
                 ForthToken::Branch(info) => {
                     print!("{}:{}:{} ", info.word, info.offset, info.conditional);
+                }
+                ForthToken::Forward(info) => {
+                    print!("{} {}", info.word, info.tail);
                 }
                 ForthToken::Comment(c) => print!("{c} "),
                 ForthToken::Text(txt) => print!("{txt} "),

@@ -16,7 +16,6 @@ enum Source {
 
 pub struct Reader {
     source: Source,      // Stdin or a file
-    line: String,        // the text of the current line
     prompt: String,      // the standard prompt
     cont_prompt: String, // the continuation prompt
     msg: Msg,
@@ -24,10 +23,7 @@ pub struct Reader {
 
 impl fmt::Debug for Reader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Tokenizer")
-            .field(&self.source)
-            .field(&self.line)
-            .finish()
+        f.debug_tuple("Tokenizer").field(&self.source).finish()
     }
 }
 
@@ -45,7 +41,6 @@ impl Reader {
             None => {
                 return Some(Reader {
                     source: Source::Stdin,
-                    line: String::new(),
                     prompt: prompt.to_owned(),
                     cont_prompt: cont_prompt.to_owned(),
                     msg: msg_handler,
@@ -57,7 +52,6 @@ impl Reader {
                     Ok(file) => {
                         return Some(Reader {
                             source: Source::Stream(BufReader::new(file)),
-                            line: String::new(),
                             prompt: prompt.to_owned(),
                             cont_prompt: cont_prompt.to_owned(),
                             msg: msg_handler,
@@ -76,10 +70,10 @@ impl Reader {
         // Read a line, storing it if there is one
         // In interactive (stdin) mode, blocks until the user provides a line.
         // Returns Option(line text). None indicates the read failed.
+        let mut new_line = String::new();
         match self.source {
             Source::Stdin => {
                 // Issue prompt
-                self.line.clear();
                 if multiline {
                     print!("{}", self.cont_prompt);
                 } else {
@@ -87,23 +81,26 @@ impl Reader {
                 }
                 io::stdout().flush().unwrap();
                 // Read from Stdin
-                if let Err(_) = io::stdin().read_line(&mut self.line) {
-                    return None;
-                } else {
-                    self.msg.info("get_line", "Got some values", &self.line);
-
-                    return Some(self.line.clone());
+                match io::stdin().read_line(&mut new_line) {
+                    Ok(_) => {
+                        self.msg.debug("get_line", "Got some values", &new_line);
+                        return Some(new_line);
+                    }
+                    Err(error) => {
+                        self.msg
+                            .error("get_line", "read_line error", &error.to_string());
+                        return None;
+                    }
                 }
             }
             Source::Stream(ref mut file) => {
                 // Read from a file. TokenSource is a BufReader. No prompts
-                self.msg.info("get_line", "Reading from file", "");
-                self.line.clear();
-                let chars_read = &file.read_line(&mut self.line);
+                self.msg.debug("get_line", "Reading from file", "");
+                let chars_read = &file.read_line(&mut new_line);
                 match chars_read {
                     Ok(chars) => {
                         if *chars > 0 {
-                            return Some(self.line.clone());
+                            return Some(new_line);
                         } else {
                             return None;
                         }

@@ -6,16 +6,34 @@ use crate::messages::Msg;
 use crate::reader::Reader;
 use crate::utility;
 
+const BRANCHES: [&str; 8] = [
+    "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
+];
+const FORWARDS: [(&str, &str); 4] = [("(", ")"), ("s\"", "\""), (".\"", "\""), ("see", " \t\n")];
+
 #[derive(Debug, Clone)]
 pub enum ForthToken {
-    Integer(i64),       // the token is an integer, stored here
-    Operator(String),   // the token is an operator
-    Branch(BranchInfo), // branch
-    Text(String),       // the token is a text string
-    Comment(String),    // an inline comment e.g. word stack signature
-    Float(f64),         // a floating point number
-    VarInt(String),     // the name of an integer variable (stored in the dictionary)
-    Empty,              // the line was empty
+    Integer(i64),         // the token is an integer, stored here
+    Operator(String),     // the token is an operator
+    Branch(BranchInfo),   // branch
+    Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
+    Text(String),         // the token is a text string
+    Comment(String),      // an inline comment e.g. word stack signature
+    Float(f64),           // a floating point number
+    VarInt(String),       // the name of an integer variable (stored in the dictionary)
+    Empty,                // the line was empty
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardInfo {
+    pub word: String,
+    pub tail: String,
+}
+
+impl ForwardInfo {
+    pub fn new(word: String, tail: String) -> ForwardInfo {
+        ForwardInfo { word, tail }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,55 +93,53 @@ impl Tokenizer {
     pub fn get_token(&mut self) -> Option<ForthToken> {
         // Return the token or None
         // trim the token text off the front of self.line
-        let token_type = self.get_token_text();
-        match token_type {
-            Some(token_type) => {
-                match token_type {
-                    TokenType::Comment => {
-                        return Some(ForthToken::Comment(self.token_string.to_string()));
-                    }
-                    TokenType::Text => {
-                        return Some(ForthToken::Text(self.token_string.to_string()));
-                    }
-                    TokenType::Executable => {
-                        if utility::is_integer(self.token_string.as_str()) {
-                            return Some(ForthToken::Integer(self.token_string.parse().unwrap()));
-                        } else if utility::is_float(self.token_string.as_str()) {
-                            return Some(ForthToken::Float(self.token_string.parse().unwrap()));
-                        } else {
-                            if vec![
-                                "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
-                            ]
-                            .contains(&self.token_string.as_str())
-                            {
-                                return Some(ForthToken::Branch(BranchInfo::new(
-                                    self.token_string.to_string(),
-                                    0,     // default, will be corrected in calculate_branches
-                                    false, // default, will be corrected in calculate_branches
-                                )));
-                            } else {
-                            }
-                            return Some(ForthToken::Operator(self.token_string.to_string()));
-                        }
-                    }
-                    TokenType::Blank => {
-                        return Some(ForthToken::Empty); // represents an empty line
-                    }
-                }
-            }
+        let token_text = self.get_token_text();
+        match token_text {
             None => {
-                return None; // Signals end of file
+                self.msg.error("get_token", "No token string", &token_text);
+                return None;
+            }
+            Some(text) => {
+                if utility::is_integer(&text) {
+                    return Some(ForthToken::Integer(text.parse().unwrap()));
+                } else if utility::is_float(&text) {
+                    return Some(ForthToken::Float(text.parse().unwrap()));
+                } else if BRANCHES.contains(&text.as_str()) {
+                    return Some(ForthToken::Branch(BranchInfo::new(text, 0, false)));
+                } else {
+                    // it's a Forward or an Operator
+                    for (word, terminator) in FORWARDS {
+                        if word == text {
+                            match self.read_until(terminator) {
+                                Some(remainder) => {
+                                    return Some(ForthToken::Forward(ForwardInfo::new(
+                                        text.to_owned(),
+                                        remainder,
+                                    )));
+                                }
+                                None => {
+                                    return Some(ForthToken::Forward(ForwardInfo::new(
+                                        text.to_owned(),
+                                        "".to_string(),
+                                    )));
+                                }
+                            }
+                        }
+                        return Some(ForthToken::Operator(text.to_owned()));
+                    }
+                    return None; // To satisfy the compiiler. We shouldn't ever get here.
+                }
             }
         }
     }
 
-    fn get_token_text(&mut self) -> Option<TokenType> {
-        // Get the full text for a token, recursing if necessary for multiline tokens (text string or comment)
+    pub fn read_until(&mut self, terminator: &str) -> Option<String> {
+        // Read from the input stream, returning a string terminating in the first occurrence
+        // of  end_char.
         let mut multiline = false; // to drive the prompt
-        let mut token_type = TokenType::Blank;
-        self.token_string.clear();
+        let mut token_string = String::new();
         let mut chars_used = 0;
-        'per_line: loop {
+        loop {
             // We explicitly break out when we have a complete token
             if self.line.is_empty() {
                 let line = self.reader.get_line(multiline);
@@ -137,78 +153,162 @@ impl Tokenizer {
                 }
             }
             'scan: for c in self.line.chars() {
-                match token_type {
-                    TokenType::Blank => {
-                        match c {
-                            ' ' => {
-                                // skip over blanks
-                                chars_used += 1;
-                            }
-                            '\"' => {
-                                self.token_string.push(c); // save the quote
-                                token_type = TokenType::Text;
-                                chars_used += 1;
-                            }
-                            '(' => {
-                                self.token_string.push(c); // save the paren
-                                token_type = TokenType::Comment;
+                if terminator.contains(c) {
+                    // We're done. We don't return the end_char as part of the string.
+                    self.line = self.line[chars_used..].to_string();
+                    return Some(token_string);
+                } else if c == '\n' {
+                    // end of line, so break out and get another
+                    token_string.push(c);
+                    chars_used = 0;
+                    multiline = true;
+                    break 'scan;
+                } else {
+                    token_string.push(c);
+                    chars_used += 1;
+                }
+            }
+        }
+    }
 
-                                chars_used += 1;
-                            }
-                            '\n' => {
-                                // We're finished
-                                self.line.clear();
-                                break 'per_line;
-                            }
-                            _ => {
-                                self.token_string.push(c);
-                                chars_used += 1;
-                                token_type = TokenType::Executable;
-                            }
-                        }
-                    }
-                    TokenType::Text | TokenType::Comment => {
-                        match c {
-                            '\"' | ')' => {
-                                self.token_string.push(c);
-                                chars_used += 1;
-                                break 'per_line;
-                            }
-                            '\n' => {
-                                // partial string is complete
-                                self.token_string.push(c);
-                                chars_used = 0;
-                                self.line.clear();
-                                multiline = true;
-                                break 'scan;
-                            }
-                            _ => {
-                                self.token_string.push(c);
-                                chars_used += 1;
-                            }
-                        }
-                    }
-                    TokenType::Executable => match c {
-                        ' ' | '\n' => {
+    fn get_token_text(&mut self) -> Option<String> {
+        // Get a single word, space or \n delimited.
+        let mut token_string = String::new();
+        let mut chars_used = 0;
+        if self.line.is_empty() {
+            match self.reader.get_line(false) {
+                Some(line) => {
+                    self.line = line;
+                    self.msg.debug(
+                        "get_token_text",
+                        "read a line of length",
+                        format!("{:?}", self.line.len()),
+                    );
+                    println!("New line is /{}/", self.line);
+                }
+                None => {
+                    // Reader error
+                    self.msg.error("get_token_text", "reader error", "");
+                    return None;
+                }
+            }
+        }
+        self.line = self.line.trim_start().to_string(); // We never need leading spaced.
+        for c in self.line.chars() {
+            match c {
+                '\n' | '\t' | ' ' => {
+                    break;
+                }
+                _ => {
+                    token_string.push(c);
+                    chars_used += 1;
+                }
+            }
+        }
+        if chars_used == 0 {
+            self.msg
+                .debug("get_token_text", "end of line", &token_string);
+            self.line.clear();
+            return self.get_token_text(); // go again
+        } else {
+            self.line = self.line[chars_used..].to_string();
+            self.msg.debug("get_token_text", "returning", &token_string);
+            return Some(token_string);
+        }
+    }
+}
+
+/*     fn get_token_text(&mut self) -> Option<TokenType> {
+    // Get the full text for a token, recursing if necessary for multiline tokens (text string or comment)
+    let mut multiline = false; // to drive the prompt
+    let mut token_type = TokenType::Blank;
+    self.token_string.clear();
+    let mut chars_used = 0;
+    'per_line: loop {
+        // We explicitly break out when we have a complete token
+        if self.line.is_empty() {
+            let line = self.reader.get_line(multiline);
+            match line {
+                Some(line) => {
+                    self.line = line;
+                }
+                None => {
+                    return None; // Signals EOF
+                }
+            }
+        }
+        'scan: for c in self.line.chars() {
+            match token_type {
+                TokenType::Blank => {
+                    match c {
+                        ' ' => {
+                            // skip over blanks
                             chars_used += 1;
+                        }
+                        '\"' => {
+                            self.token_string.push(c); // save the quote
+                            token_type = TokenType::Text;
+                            chars_used += 1;
+                        }
+                        '(' => {
+                            self.token_string.push(c); // save the paren
+                            token_type = TokenType::Comment;
+
+                            chars_used += 1;
+                        }
+                        '\n' => {
+                            // We're finished
+                            self.line.clear();
                             break 'per_line;
                         }
                         _ => {
                             self.token_string.push(c);
                             chars_used += 1;
-                            multiline = false;
+                            token_type = TokenType::Executable;
                         }
-                    },
+                    }
                 }
+                TokenType::Text | TokenType::Comment => {
+                    match c {
+                        '\"' | ')' => {
+                            self.token_string.push(c);
+                            chars_used += 1;
+                            break 'per_line;
+                        }
+                        '\n' => {
+                            // partial string is complete
+                            self.token_string.push(c);
+                            chars_used = 0;
+                            self.line.clear();
+                            multiline = true;
+                            break 'scan;
+                        }
+                        _ => {
+                            self.token_string.push(c);
+                            chars_used += 1;
+                        }
+                    }
+                }
+                TokenType::Executable => match c {
+                    ' ' | '\n' => {
+                        chars_used += 1;
+                        break 'per_line;
+                    }
+                    _ => {
+                        self.token_string.push(c);
+                        chars_used += 1;
+                        multiline = false;
+                    }
+                },
             }
         }
-        self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
-        self.msg.info(
-            "get_token_text",
-            "Token, type, line, chars_used",
-            (&token_type, &self.token_string, &self.line, chars_used),
-        );
-
-        return Some(token_type);
     }
-}
+    self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
+    self.msg.info(
+        "get_token_text",
+        "Token, type, line, chars_used",
+        (&token_type, &self.token_string, &self.line, chars_used),
+    );
+
+    return Some(token_type);
+} */

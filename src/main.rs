@@ -13,7 +13,7 @@ use messages::DebugLevel;
 fn main() {
     let mut interpreter = ForthInterpreter::new("Ok ", ">  ");
 
-    interpreter.msg_handler.set_level(DebugLevel::Warnings);
+    interpreter.msg_handler.set_level(DebugLevel::Info);
 
     /* // Define some Forth words
        interpreter.defined_words.insert(
@@ -35,7 +35,7 @@ fn main() {
         if interpreter.process_token() {
             interpreter
                 .msg_handler
-                .debug("main", "   Stack", &interpreter.stack);
+                .info("main", "   Stack", &interpreter.stack);
             interpreter
                 .msg_handler
                 .debug("main", "   Words", &interpreter.defined_words);
