@@ -269,6 +269,21 @@ impl ForthInterpreter {
                             self.msg_handler.error("/", "Stack Underflow", "")
                         }
                     }
+                    "<" => {
+                        if self.stack_underflow("<", 2) {
+                            self.abort_flag = true;
+                        } else {
+                            let l = self.stack.len() - 1;
+                            let result = if self.stack[l - 1] < self.stack[l] {
+                                0
+                            } else {
+                                -1
+                            };
+                            self.stack.pop();
+                            self.stack.pop();
+                            self.stack.push(result);
+                        }
+                    }
                     "." => {
                         if let Some(a) = self.stack.pop() {
                             println!("{a}");
@@ -337,13 +352,41 @@ impl ForthInterpreter {
                             self.stack.push(b);
                         } else {
                             self.msg_handler
-                                .warning("DUP", "Too few elements on stack.", "");
+                                .warning("SWAP", "Too few elements on stack.", "");
+                        }
+                    }
+                    "over" => {
+                        if self.stack_underflow("OVER", 2) {
+                            self.abort_flag = true;
+                        } else {
+                            let item = self.stack.get(self.stack.len() - 2);
+                            match item {
+                                Some(item) => {
+                                    self.stack.push(*item);
+                                }
+                                None => {
+                                    self.abort_flag = true;
+                                }
+                            }
+                        }
+                    }
+                    "rot" => {
+                        if self.stack_underflow("OVER", 3) {
+                            self.abort_flag = true;
+                        } else {
+                            let top_index = self.stack.len() - 1;
+                            let top = self.stack[top_index - 2];
+                            let middle = self.stack[top_index];
+                            let bottom = self.stack[top_index - 1];
+                            self.stack[top_index - 2] = bottom;
+                            self.stack[top_index - 1] = middle;
+                            self.stack[top_index] = top;
                         }
                     }
                     "abort" => {
                         // empty the stack, reset any pending operations, and return to the prompt
                         self.msg_handler
-                            .warning("abort", "Terminating execution", "");
+                            .warning("ABORT", "Terminating execution", "");
                         self.stack.clear();
                         self.parser.clear();
                         self.abort_flag = true;
