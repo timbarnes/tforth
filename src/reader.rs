@@ -29,7 +29,7 @@ impl fmt::Debug for Reader {
 
 impl Reader {
     pub fn new(
-        file_path: Option<&str>,
+        file_path: Option<&std::path::PathBuf>,
         prompt: &str,
         cont_prompt: &str,
         msg_handler: Msg,

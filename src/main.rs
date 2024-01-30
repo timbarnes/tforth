@@ -14,6 +14,11 @@ fn main() {
     let mut interpreter = ForthInterpreter::new("Ok ", ">  ");
 
     interpreter.msg_handler.set_level(DebugLevel::Info);
+    if !interpreter.load_file("forth/core.fs") {
+        interpreter
+            .msg_handler
+            .error("MAIN", "Unable to load core dictionary", "core.fs")
+    }
 
     /* // Define some Forth words
        interpreter.defined_words.insert(

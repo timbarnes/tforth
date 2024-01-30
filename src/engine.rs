@@ -216,14 +216,15 @@ impl ForthInterpreter {
                     _ => (),
                 }
             }
-            ForthToken::Text(txt) | ForthToken::Comment(txt) => {
-                self.msg_handler.error(
-                    "execute_token",
-                    "Should not have Text or Comment tokens",
-                    txt.as_str(),
-                );
-                self.abort_flag = true;
-            }
+            /*             ForthToken::Text(txt) | ForthToken::Comment(txt) => {
+                           self.msg_handler.error(
+                               "execute_token",
+                               "Should not have Text or Comment tokens",
+                               txt.as_str(),
+                           );
+                           self.abort_flag = true;
+                       }
+            */
             ForthToken::Branch(info) => {
                 match info.word.as_str() {
                     // runtime semantics
@@ -522,37 +523,36 @@ impl ForthInterpreter {
         }
     }
 
-    fn loaded(&mut self) {
-        // Load a file of forth code. Initial implementation is not intended to be recursive.
-        // attempt to open the file, return an error if not possible
-        let load_file = File::open(self.text.as_str());
-        match load_file {
-            Ok(_handle) => {
-                // success: read the file
-                self.msg_handler
-                    .info("loaded", "Loading file", (&self.text, &self.file_mode));
-
+    pub fn load_file(&mut self, path: &str) -> bool {
+        // read in a file of forth code using the provided path
+        // returns false in case of error
+        // does not modify self.text
+        let full_path = std::fs::canonicalize(path);
+        match full_path {
+            Ok(full_path) => {
+                // path is good
                 // make a new reader (it will be swapped with self.parser.reader)
-                let reader = Reader::new(Some(self.text.as_str()), "", "", Msg::new());
+                let reader = Reader::new(Some(&full_path), "", "", Msg::new());
                 match reader {
                     Some(mut previous_reader) => {
                         std::mem::swap(&mut previous_reader, &mut self.parser.reader);
                         loop {
                             if self.process_token() {
-                                self.msg_handler.warning("loaded", "processed", &self.token);
+                                self.msg_handler.debug("loaded", "processed", &self.token);
                             } else {
                                 self.msg_handler
-                                    .warning("loaded", "No more tokens to read", "");
+                                    .debug("loaded", "No more tokens to read", "");
                                 break;
                             }
                         }
                         std::mem::swap(&mut self.parser.reader, &mut previous_reader);
-                        return;
+                        return true;
                     }
                     None => {
                         self.abort_flag = true;
                         self.msg_handler
                             .error("loaded", "Failed to create new reader", "");
+                        return false;
                     }
                 }
             }
@@ -560,8 +560,15 @@ impl ForthInterpreter {
                 self.msg_handler
                     .error("loaded", error.to_string().as_str(), self.text.as_str());
                 self.abort_flag = true;
+                return false;
             }
         }
+    }
+
+    fn loaded(&mut self) {
+        // Load a file of forth code. Initial implementation is not intended to be recursive.
+        // attempt to open the file, return an error if not possible
+        self.load_file(self.text.clone().as_str());
     }
 
     fn word_see(&self, name: &str, definition: &Vec<ForthToken>) {
@@ -577,8 +584,6 @@ impl ForthInterpreter {
                 ForthToken::Forward(info) => {
                     print!("{} {}", info.word, info.tail);
                 }
-                ForthToken::Comment(c) => print!("{c} "),
-                ForthToken::Text(txt) => print!("{txt} "),
                 ForthToken::VarInt(txt) => print!("{txt} "),
                 ForthToken::Empty => print!("ForthToken::Empty "),
             }

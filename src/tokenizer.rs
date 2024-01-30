@@ -17,8 +17,6 @@ pub enum ForthToken {
     Operator(String),     // the token is an operator
     Branch(BranchInfo),   // branch
     Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
-    Text(String),         // the token is a text string
-    Comment(String),      // an inline comment e.g. word stack signature
     Float(f64),           // a floating point number
     VarInt(String),       // the name of an integer variable (stored in the dictionary)
     Empty,                // the line was empty
@@ -51,20 +49,6 @@ impl BranchInfo {
             conditional,
         }
     }
-}
-
-/* #[derive(Debug, Clone)]
-pub enum BranchKind {
-    ZeroEqual,
-    Unconditional,
-}
- */
-#[derive(Debug)]
-enum TokenType {
-    Blank,
-    Executable, // Words and numbers
-    Text,
-    Comment,
 }
 
 #[derive(Debug)]
