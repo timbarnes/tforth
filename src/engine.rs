@@ -1,7 +1,6 @@
 //The Tforth interpreter struct and implementation
 
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{self, Write};
 
 use crate::messages::{DebugLevel, Msg};
@@ -12,6 +11,8 @@ use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
 pub struct ForthInterpreter {
     pub stack: Vec<i64>, // the numeric stack, currently integers
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
+    pub variable_stack: Vec<i64>,                        // where variables are stored
+    pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
@@ -41,6 +42,8 @@ impl ForthInterpreter {
                 stack: Vec::new(),
                 defined_words: HashMap::new(),
                 text: String::new(),
+                variable_stack: Vec::new(),
+                defined_variables: HashMap::new(),
                 file_mode: FileMode::Unset,
                 compile_mode: false,
                 abort_flag: false,
@@ -206,12 +209,23 @@ impl ForthInterpreter {
                 match info.word.as_str() {
                     "(" => {} // ignore comments
                     ".\"" => {
-                        let tail = &info.tail[1..info.tail.len() - 2];
+                        let tail = &info.tail[..info.tail.len()];
                         println!("{}", tail);
                     }
                     "s\"" => {
                         let txt = &info.tail;
-                        self.text = info.tail[1..txt.len() - 2].to_owned();
+                        self.text = info.tail[..txt.len()].to_owned();
+                    }
+                    "variable" => {
+                        let index = self.variable_stack.len();
+                        self.variable_stack.push(0); // create the location for the new variable
+                        self.defined_variables
+                            .insert(info.tail.clone(), index as i64);
+                        self.msg_handler.warning(
+                            "execute_token",
+                            "Dealing with a variable called",
+                            info.tail.clone(),
+                        );
                     }
                     _ => (),
                 }
@@ -285,6 +299,13 @@ impl ForthInterpreter {
                             self.stack.push(b / a);
                         } else {
                             self.msg_handler.error("/", "Stack Underflow", "")
+                        }
+                    }
+                    "mod" => {
+                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                            self.stack.push(b % a);
+                        } else {
+                            self.msg_handler.error("MOD", "Stack Underflow", "")
                         }
                     }
                     "<" => {
@@ -423,6 +444,42 @@ impl ForthInterpreter {
                             self.stack[top_index] = top;
                         }
                     }
+                    "and" => {
+                        if !self.stack_underflow("AND", 2) {
+                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                                self.stack.push(a & b);
+                            }
+                        }
+                    }
+                    "or" => {
+                        if !self.stack_underflow("OR", 2) {
+                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                                self.stack.push(a | b);
+                            }
+                        }
+                    }
+                    "@" => {
+                        if !self.stack_underflow("@", 1) {
+                            if let Some(adr) = self.stack.pop() {
+                                let address = adr.max(0) as usize;
+                                if address < self.variable_stack.len() {
+                                    self.stack.push(self.variable_stack[address]);
+                                } else {
+                                    self.msg_handler.error("@", "Bad variable address", adr);
+                                }
+                            }
+                        }
+                    }
+                    "!" => {
+                        if !self.stack_underflow("!", 2) {
+                            if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
+                                let address = addr.max(0) as usize;
+                                if address < self.variable_stack.len() {
+                                    self.variable_stack[address] = val;
+                                }
+                            }
+                        }
+                    }
                     "abort" => {
                         // empty the stack, reset any pending operations, and return to the prompt
                         self.msg_handler
@@ -435,10 +492,14 @@ impl ForthInterpreter {
                         for (key, _) in self.defined_words.iter() {
                             print!("{key} ");
                         }
+                        println!("");
                     }
                     "seeall" => {
                         for (key, definition) in self.defined_words.iter() {
                             self.word_see(key, definition);
+                        }
+                        for (key, index) in self.defined_variables.iter() {
+                            self.variable_see(key, *index);
                         }
                     }
                     "see" => {
@@ -509,6 +570,9 @@ impl ForthInterpreter {
                             (program_counter, jumped) = self.execute_token(program_counter, jumped);
                         }
                     }
+                } else if self.defined_variables.contains_key(word_name) {
+                    //  check for a variable
+                    self.stack.push(self.defined_variables[word_name]); // push the index on the stack
                 } else {
                     self.msg_handler
                         .error("execute_definition", "Undefined word", &word_name);
@@ -569,6 +633,12 @@ impl ForthInterpreter {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
         self.load_file(self.text.clone().as_str());
+    }
+
+    fn variable_see(&self, name: &str, index: i64) {
+        let idx = index.max(0) as usize;
+        let value = self.variable_stack[idx];
+        println!("Variable {name}: {value}");
     }
 
     fn word_see(&self, name: &str, definition: &Vec<ForthToken>) {

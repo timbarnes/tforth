@@ -9,7 +9,13 @@ use crate::utility;
 const BRANCHES: [&str; 8] = [
     "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
 ];
-const FORWARDS: [(&str, &str); 4] = [("(", ")"), ("s\"", "\""), (".\"", "\""), ("see", " \t\n")];
+const FORWARDS: [(&str, &str); 5] = [
+    ("(", ")"),
+    ("s\"", "\""),
+    (".\"", "\""),
+    ("see", " \t\n"),
+    ("variable", " \t\n"),
+];
 
 #[derive(Debug, Clone)]
 pub enum ForthToken {
@@ -98,7 +104,7 @@ impl Tokenizer {
                                 Some(remainder) => {
                                     return Some(ForthToken::Forward(ForwardInfo::new(
                                         text.to_owned(),
-                                        format!("{remainder} {terminator}"),
+                                        format!("{remainder}"),
                                     )));
                                 }
                                 None => {
@@ -194,7 +200,7 @@ impl Tokenizer {
             self.line.clear();
             return self.get_token_text(); // go again
         } else {
-            self.line = self.line[chars_used..].to_string();
+            self.line = self.line[chars_used + 1..].to_string();
             self.msg.debug("get_token_text", "returning", &token_string);
             return Some(token_string);
         }
