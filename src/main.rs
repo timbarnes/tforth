@@ -8,11 +8,9 @@ mod reader;
 mod tokenizer;
 
 use config::Config;
-use std::env;
 
 fn main() {
-    let args = env::args().collect();
-    let mut config = Config::new(&args);
+    let mut config = Config::new();
     config.process_args();
 
     if config.run {

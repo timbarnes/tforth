@@ -1,7 +1,7 @@
 // system configuration and command line processing
 
 use crate::engine::ForthInterpreter;
-use crate::messages::{DebugLevel, Msg};
+use crate::messages::DebugLevel;
 
 use ::clap::{arg, Command};
 
@@ -11,8 +11,6 @@ const EXIT_MESSAGE: &str = "Finished";
 const DEFAULT_CORE: &str = "forth/core.fs";
 
 pub struct Config {
-    version: String,
-    args: Vec<String>,
     debug_level: DebugLevel,
     loaded_file: String,
     loaded_core: bool,
@@ -22,10 +20,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(args: &Vec<String>) -> Config {
+    pub fn new() -> Config {
         Config {
-            version: VERSION.to_owned(),
-            args: args.clone(),
             debug_level: DebugLevel::Error,
             loaded_file: "".to_owned(),
             loaded_core: false,
@@ -37,7 +33,7 @@ impl Config {
 
     pub fn process_args(&mut self) -> &Config {
         // process arguments
-        let msg = Msg::new(); // Create a message handler for argument errors
+        // let msg = Msg::new(); // Create a message handler for argument errors
 
         let arguments = Command::new("tForth")
             .version(VERSION)
@@ -96,7 +92,9 @@ impl Config {
         forth.msg.set_level(self.debug_level.clone());
 
         if !self.no_core {
-            if !forth.load_file(self.core_file.as_str()) {
+            if forth.load_file(self.core_file.as_str()) {
+                self.loaded_core = true;
+            } else {
                 forth
                     .msg
                     .error("MAIN", "Unable to load core dictionary", &self.core_file);
