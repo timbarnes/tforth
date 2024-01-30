@@ -4,8 +4,8 @@ use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
 pub enum DebugLevel {
-    Errors,
-    Warnings,
+    Error,
+    Warning,
     Info,
     Debug,
 }
@@ -18,7 +18,7 @@ pub struct Msg {
 impl Msg {
     pub fn new() -> Msg {
         Msg {
-            debug_level: DebugLevel::Errors,
+            debug_level: DebugLevel::Error,
         }
     }
     pub fn set_level(&mut self, lev: DebugLevel) {
@@ -53,7 +53,7 @@ impl Msg {
 
     pub fn warning<T: Debug>(&self, context: &str, text: &str, val: T) {
         match self.debug_level {
-            DebugLevel::Warnings | DebugLevel::Info | DebugLevel::Debug => {
+            DebugLevel::Warning | DebugLevel::Info | DebugLevel::Debug => {
                 println!("WARNING: {context}: {text}: {:?}", val);
             }
             _ => {

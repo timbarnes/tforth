@@ -36,7 +36,7 @@ impl Reader {
     ) -> Option<Reader> {
         // Initialize a tokenizer.
         let mut message_handler = Msg::new();
-        message_handler.set_level(DebugLevel::Errors);
+        message_handler.set_level(DebugLevel::Error);
         match file_path {
             None => {
                 return Some(Reader {

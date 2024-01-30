@@ -18,7 +18,7 @@ pub struct ForthInterpreter {
     compile_mode: bool, // true if compiling a word
     abort_flag: bool,   // true if abort has been called
     exit_flag: bool,    // set when the "bye" word is executed.
-    pub msg_handler: Msg,
+    pub msg: Msg,
     parser: Tokenizer,
     new_word_name: String,
     new_word_definition: Vec<ForthToken>,
@@ -48,7 +48,7 @@ impl ForthInterpreter {
                 compile_mode: false,
                 abort_flag: false,
                 exit_flag: false,
-                msg_handler: Msg::new(),
+                msg: Msg::new(),
                 parser: parser,
                 new_word_name: String::new(),
                 new_word_definition: Vec::new(),
@@ -79,7 +79,7 @@ impl ForthInterpreter {
 
     fn stack_underflow(&self, op: &str, n: usize) -> bool {
         if self.stack.len() < n {
-            self.msg_handler.error(op, "Stack underflow", "");
+            self.msg.error(op, "Stack underflow", "");
             true
         } else {
             false
@@ -90,8 +90,7 @@ impl ForthInterpreter {
         let new_token = self.parser.get_token(); // Prompt if necessary, return a token
         match new_token {
             Some(new_token) => {
-                self.msg_handler
-                    .debug("execute_token", "operator is", &self.token);
+                self.msg.debug("execute_token", "operator is", &self.token);
                 self.token = new_token;
                 match self.token {
                     ForthToken::Empty => {
@@ -132,12 +131,11 @@ impl ForthInterpreter {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
                 } else if tstring == ":" {
-                    self.msg_handler
+                    self.msg
                         .warning("compile_token", "Illegal inside definition", ":");
                 } else {
                     // push the new token onto the definition
-                    self.msg_handler
-                        .debug("compile_token", "Pushing", &self.token);
+                    self.msg.debug("compile_token", "Pushing", &self.token);
                     self.new_word_definition.push(self.token.clone());
                 }
             }
@@ -217,7 +215,7 @@ impl ForthInterpreter {
                         self.variable_stack.push(0); // create the location for the new variable
                         self.defined_variables
                             .insert(info.tail.clone(), index as i64);
-                        self.msg_handler.warning(
+                        self.msg.warning(
                             "execute_token",
                             "Dealing with a variable called",
                             info.tail.clone(),
@@ -287,21 +285,21 @@ impl ForthInterpreter {
                         if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
                             self.stack.push(a * b);
                         } else {
-                            self.msg_handler.error("*", "Stack Underflow", "")
+                            self.msg.error("*", "Stack Underflow", "")
                         }
                     }
                     "/" => {
                         if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
                             self.stack.push(b / a);
                         } else {
-                            self.msg_handler.error("/", "Stack Underflow", "")
+                            self.msg.error("/", "Stack Underflow", "")
                         }
                     }
                     "mod" => {
                         if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
                             self.stack.push(b % a);
                         } else {
-                            self.msg_handler.error("MOD", "Stack Underflow", "")
+                            self.msg.error("MOD", "Stack Underflow", "")
                         }
                     }
                     "<" => {
@@ -323,7 +321,7 @@ impl ForthInterpreter {
                         if let Some(a) = self.stack.pop() {
                             println!("{a}");
                         } else {
-                            self.msg_handler.error(".", "Stack Underflow", "")
+                            self.msg.error(".", "Stack Underflow", "")
                         }
                     }
                     "true" => {
@@ -370,7 +368,7 @@ impl ForthInterpreter {
                                         let c = n as u8 as char;
                                         print!("{}", c);
                                     } else {
-                                        self.msg_handler.error("ECHO", "Arg out of range", n);
+                                        self.msg.error("ECHO", "Arg out of range", n);
                                     }
                                 }
                                 None => {}
@@ -388,15 +386,14 @@ impl ForthInterpreter {
                         if let Some(top) = self.stack.last() {
                             self.stack.push(*top);
                         } else {
-                            self.msg_handler
-                                .warning("DUP", "Error - DUP: Stack is empty.", "");
+                            self.msg.warning("DUP", "Error - DUP: Stack is empty.", "");
                         }
                     }
                     "drop" => {
                         if self.stack.len() > 0 {
                             self.stack.pop();
                         } else {
-                            self.msg_handler.warning("DROP", "Stack is empty.", "");
+                            self.msg.warning("DROP", "Stack is empty.", "");
                         }
                     }
                     "swap" => {
@@ -408,8 +405,7 @@ impl ForthInterpreter {
                             self.stack.push(a);
                             self.stack.push(b);
                         } else {
-                            self.msg_handler
-                                .warning("SWAP", "Too few elements on stack.", "");
+                            self.msg.warning("SWAP", "Too few elements on stack.", "");
                         }
                     }
                     "over" => {
@@ -461,7 +457,7 @@ impl ForthInterpreter {
                                 if address < self.variable_stack.len() {
                                     self.stack.push(self.variable_stack[address]);
                                 } else {
-                                    self.msg_handler.error("@", "Bad variable address", adr);
+                                    self.msg.error("@", "Bad variable address", adr);
                                 }
                             }
                         }
@@ -478,8 +474,7 @@ impl ForthInterpreter {
                     }
                     "abort" => {
                         // empty the stack, reset any pending operations, and return to the prompt
-                        self.msg_handler
-                            .warning("ABORT", "Terminating execution", "");
+                        self.msg.warning("ABORT", "Terminating execution", "");
                         self.stack.clear();
                         self.parser.clear();
                         self.abort_flag = true;
@@ -505,8 +500,7 @@ impl ForthInterpreter {
                                 self.word_see(self.text.as_str(), definition);
                             }
                             None => {
-                                self.msg_handler
-                                    .error("see", "Word not found", self.text.as_str());
+                                self.msg.error("see", "Word not found", self.text.as_str());
                             }
                         }
                     }
@@ -520,13 +514,13 @@ impl ForthInterpreter {
                         self.loaded();
                     }
                     "dbg" => match self.stack.pop() {
-                        Some(0) => self.msg_handler.set_level(DebugLevel::Errors),
-                        Some(1) => self.msg_handler.set_level(DebugLevel::Warnings),
-                        Some(2) => self.msg_handler.set_level(DebugLevel::Info),
-                        _ => self.msg_handler.set_level(DebugLevel::Debug),
+                        Some(0) => self.msg.set_level(DebugLevel::Error),
+                        Some(1) => self.msg.set_level(DebugLevel::Warning),
+                        Some(2) => self.msg.set_level(DebugLevel::Info),
+                        _ => self.msg.set_level(DebugLevel::Debug),
                     },
                     "debuglevel?" => {
-                        println!("DebugLevel is {:?}", self.msg_handler.get_level());
+                        println!("DebugLevel is {:?}", self.msg.get_level());
                     }
                     ":" => {
                         // Enter compile mode
@@ -570,14 +564,13 @@ impl ForthInterpreter {
                     //  check for a variable
                     self.stack.push(self.defined_variables[word_name]); // push the index on the stack
                 } else {
-                    self.msg_handler
+                    self.msg
                         .error("execute_definition", "Undefined word", &word_name);
                     return;
                 }
             }
             _ => {
-                self.msg_handler
-                    .error("execute_definition", "Definition error", "");
+                self.msg.error("execute_definition", "Definition error", "");
                 return;
             }
         }
@@ -598,10 +591,9 @@ impl ForthInterpreter {
                         std::mem::swap(&mut previous_reader, &mut self.parser.reader);
                         loop {
                             if self.process_token() {
-                                self.msg_handler.debug("loaded", "processed", &self.token);
+                                self.msg.debug("loaded", "processed", &self.token);
                             } else {
-                                self.msg_handler
-                                    .debug("loaded", "No more tokens to read", "");
+                                self.msg.debug("loaded", "No more tokens to read", "");
                                 break;
                             }
                         }
@@ -610,14 +602,13 @@ impl ForthInterpreter {
                     }
                     None => {
                         self.abort_flag = true;
-                        self.msg_handler
-                            .error("loaded", "Failed to create new reader", "");
+                        self.msg.error("loaded", "Failed to create new reader", "");
                         return false;
                     }
                 }
             }
             Err(error) => {
-                self.msg_handler
+                self.msg
                     .error("loaded", error.to_string().as_str(), self.text.as_str());
                 self.abort_flag = true;
                 return false;
