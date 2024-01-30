@@ -1,4 +1,4 @@
-//The Tforth interpreter struct and implementation
+//The tForth interpreter struct and implementation
 
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -199,10 +199,6 @@ impl ForthInterpreter {
             ForthToken::Float(_num) => {
                 // stack needs to support floats, ints, and pointers
                 // self.stack.push(num);
-            }
-            ForthToken::VarInt(name) => {
-                self.msg_handler
-                    .warning("execute_token", "VarInt not implemented", name);
             }
             ForthToken::Forward(info) => {
                 // need a better way to capture forward and branch types' unique behaviors
@@ -654,7 +650,6 @@ impl ForthInterpreter {
                 ForthToken::Forward(info) => {
                     print!("{} {}", info.word, info.tail);
                 }
-                ForthToken::VarInt(txt) => print!("{txt} "),
                 ForthToken::Empty => print!("ForthToken::Empty "),
             }
         }

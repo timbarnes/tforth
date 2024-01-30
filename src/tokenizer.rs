@@ -4,7 +4,7 @@
 
 use crate::messages::Msg;
 use crate::reader::Reader;
-use crate::utility;
+//use crate::utility;
 
 const BRANCHES: [&str; 8] = [
     "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
@@ -24,7 +24,6 @@ pub enum ForthToken {
     Branch(BranchInfo),   // branch
     Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
     Float(f64),           // a floating point number
-    VarInt(String),       // the name of an integer variable (stored in the dictionary)
     Empty,                // the line was empty
 }
 
@@ -90,9 +89,9 @@ impl Tokenizer {
                 return None;
             }
             Some(text) => {
-                if utility::is_integer(&text) {
+                if is_integer(&text) {
                     return Some(ForthToken::Integer(text.parse().unwrap()));
-                } else if utility::is_float(&text) {
+                } else if is_float(&text) {
                     return Some(ForthToken::Float(text.parse().unwrap()));
                 } else if BRANCHES.contains(&text.as_str()) {
                     return Some(ForthToken::Branch(BranchInfo::new(text, 0, false)));
@@ -207,97 +206,10 @@ impl Tokenizer {
     }
 }
 
-/*     fn get_token_text(&mut self) -> Option<TokenType> {
-    // Get the full text for a token, recursing if necessary for multiline tokens (text string or comment)
-    let mut multiline = false; // to drive the prompt
-    let mut token_type = TokenType::Blank;
-    self.token_string.clear();
-    let mut chars_used = 0;
-    'per_line: loop {
-        // We explicitly break out when we have a complete token
-        if self.line.is_empty() {
-            let line = self.reader.get_line(multiline);
-            match line {
-                Some(line) => {
-                    self.line = line;
-                }
-                None => {
-                    return None; // Signals EOF
-                }
-            }
-        }
-        'scan: for c in self.line.chars() {
-            match token_type {
-                TokenType::Blank => {
-                    match c {
-                        ' ' => {
-                            // skip over blanks
-                            chars_used += 1;
-                        }
-                        '\"' => {
-                            self.token_string.push(c); // save the quote
-                            token_type = TokenType::Text;
-                            chars_used += 1;
-                        }
-                        '(' => {
-                            self.token_string.push(c); // save the paren
-                            token_type = TokenType::Comment;
+pub fn is_integer(s: &str) -> bool {
+    s.parse::<i64>().is_ok()
+}
 
-                            chars_used += 1;
-                        }
-                        '\n' => {
-                            // We're finished
-                            self.line.clear();
-                            break 'per_line;
-                        }
-                        _ => {
-                            self.token_string.push(c);
-                            chars_used += 1;
-                            token_type = TokenType::Executable;
-                        }
-                    }
-                }
-                TokenType::Text | TokenType::Comment => {
-                    match c {
-                        '\"' | ')' => {
-                            self.token_string.push(c);
-                            chars_used += 1;
-                            break 'per_line;
-                        }
-                        '\n' => {
-                            // partial string is complete
-                            self.token_string.push(c);
-                            chars_used = 0;
-                            self.line.clear();
-                            multiline = true;
-                            break 'scan;
-                        }
-                        _ => {
-                            self.token_string.push(c);
-                            chars_used += 1;
-                        }
-                    }
-                }
-                TokenType::Executable => match c {
-                    ' ' | '\n' => {
-                        chars_used += 1;
-                        break 'per_line;
-                    }
-                    _ => {
-                        self.token_string.push(c);
-                        chars_used += 1;
-                        multiline = false;
-                    }
-                },
-            }
-        }
-    }
-    self.line = self.line[chars_used..].to_string(); // eliminate the characters that have been used
-    self.msg.info(
-        "get_token_text",
-        "Token, type, line, chars_used",
-        (&token_type, &self.token_string, &self.line, chars_used),
-    );
-
-    return Some(token_type);
-} */
+pub fn is_float(s: &str) -> bool {
+    s.parse::<f64>().is_ok()
+}
