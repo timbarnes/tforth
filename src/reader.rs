@@ -66,7 +66,7 @@ impl Reader {
         }
     }
 
-    pub fn get_line(&mut self, multiline: bool) -> Option<String> {
+    pub fn get_line(&mut self, current_stack: &String, multiline: bool) -> Option<String> {
         // Read a line, storing it if there is one
         // In interactive (stdin) mode, blocks until the user provides a line.
         // Returns Option(line text). None indicates the read failed.
@@ -77,7 +77,7 @@ impl Reader {
                 if multiline {
                     print!("{}", self.cont_prompt);
                 } else {
-                    print!("{}", self.prompt);
+                    print!("{} {}", current_stack, self.prompt);
                 }
                 io::stdout().flush().unwrap();
                 // Read from Stdin

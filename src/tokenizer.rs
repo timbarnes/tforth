@@ -79,10 +79,10 @@ impl Tokenizer {
         self.token_string.clear();
     }
 
-    pub fn get_token(&mut self) -> Option<ForthToken> {
+    pub fn get_token(&mut self, current_stack: &String) -> Option<ForthToken> {
         // Return the token or None
         // trim the token text off the front of self.line
-        let token_text = self.get_token_text();
+        let token_text = self.get_token_text(current_stack);
         match token_text {
             None => {
                 // self.msg.error("get_token", "No token string", &token_text);
@@ -130,7 +130,7 @@ impl Tokenizer {
         loop {
             // We explicitly break out when we have a complete token
             if self.line.is_empty() {
-                let line = self.reader.get_line(multiline);
+                let line = self.reader.get_line(&"".to_owned(), multiline);
                 match line {
                     Some(line) => {
                         self.line = line;
@@ -160,12 +160,12 @@ impl Tokenizer {
         }
     }
 
-    fn get_token_text(&mut self) -> Option<String> {
+    fn get_token_text(&mut self, current_stack: &String) -> Option<String> {
         // Get a single word, space or \n delimited.
         let mut token_string = String::new();
         let mut chars_used = 0;
         if self.line.is_empty() {
-            match self.reader.get_line(false) {
+            match self.reader.get_line(current_stack, false) {
                 Some(line) => {
                     self.line = line;
                     self.msg.debug(
@@ -195,7 +195,7 @@ impl Tokenizer {
             self.msg
                 .debug("get_token_text", "end of line", &token_string);
             self.line.clear();
-            return self.get_token_text(); // go again
+            return self.get_token_text(current_stack); // go again
         } else {
             self.line = self.line[chars_used..].to_string();
             self.msg.debug("get_token_text", "returning", &token_string);

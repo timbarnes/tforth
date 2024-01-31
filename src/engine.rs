@@ -56,6 +56,7 @@ impl ForthInterpreter {
                 new_word_name: String::new(),
                 new_word_definition: Vec::new(),
                 token: ForthToken::Empty,
+                show_stack: false,
             }
         } else {
             panic!("unable to create reader");
@@ -90,7 +91,7 @@ impl ForthInterpreter {
     }
 
     pub fn process_token(&mut self) -> bool {
-        let new_token = self.parser.get_token(); // Prompt if necessary, return a token
+        let new_token = self.parser.get_token(&self.get_stack()); // Prompt if necessary, return a token
         match new_token {
             Some(new_token) => {
                 self.msg.debug("execute_token", "operator is", &self.token);
@@ -392,6 +393,12 @@ impl ForthInterpreter {
                         // print stack contents
                         println!("{:?}", self.stack);
                     }
+                    "show-stack" => {
+                        self.show_stack = true;
+                    }
+                    "hide-stack" => {
+                        self.show_stack = false;
+                    }
                     ".s\"" => {
                         // print the saved string
                         println!("{:?}", self.text);
@@ -670,5 +677,13 @@ impl ForthInterpreter {
             }
         }
         println!(";");
+    }
+
+    fn get_stack(&self) -> String {
+        if self.show_stack {
+            return format!("{:?}", self.stack);
+        } else {
+            return "".to_owned();
+        }
     }
 }
