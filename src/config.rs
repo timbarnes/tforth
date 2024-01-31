@@ -8,7 +8,7 @@ use ::clap::{arg, Command};
 const VERSION: &str = "0.1.24.1.30";
 const WELCOME_MESSAGE: &str = "Welcome to tForth.";
 const EXIT_MESSAGE: &str = "Finished";
-const DEFAULT_CORE: &str = "forth/core.fs";
+const DEFAULT_CORE: &str = "core.fs";
 
 pub struct Config {
     debug_level: DebugLevel,
@@ -69,7 +69,6 @@ impl Config {
         let nocore = arguments.get_one::<bool>("nocore");
         match nocore {
             Some(_nocore) => {
-                println!("nocore: {}", _nocore);
                 self.no_core = true;
             }
             None => self.no_core = false,
