@@ -13,6 +13,7 @@ pub struct ForthInterpreter {
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
     pub variable_stack: Vec<i64>,                        // where variables are stored
     pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
+    pub control_stack: Vec<i64>,                         // for do loops etc.
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
@@ -44,6 +45,7 @@ impl ForthInterpreter {
                 text: String::new(),
                 variable_stack: Vec::new(),
                 defined_variables: HashMap::new(),
+                control_stack: Vec::new(),
                 file_mode: FileMode::Unset,
                 compile_mode: false,
                 abort_flag: false,
@@ -177,6 +179,19 @@ impl ForthInterpreter {
                                 );
                             }
                         }
+                        "do" => {
+                            // push onto branch_stack
+                            branch_stack.push(("do", idx));
+                        }
+                        "loop" => {
+                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
+                            if let Some((word, place)) = branch_stack.pop() {
+                                self.new_word_definition[place] = ForthToken::Branch(
+                                    BranchInfo::new(word.to_string(), idx - place, true),
+                                );
+                                // need to put in a value for move direction
+                            }
+                        }
                         _ => (),
                     }
                 }
@@ -258,6 +273,15 @@ impl ForthInterpreter {
                     "then" => {
                         jumped = false;
                     }
+                    "do" => {
+                        // ( limit first -- )
+                        // first time, (branch_flag == true) grab limit and first values and put them on the control stack
+                        // if limit == current, jump over LOOP, otherwise increment current,
+                        // set branch_flag false, and continue
+                    }
+                    "loop" => {
+                        // unconditionally jump back to the matching loop
+                    }
                     _ => (),
                 }
             }
@@ -308,9 +332,9 @@ impl ForthInterpreter {
                         } else {
                             let l = self.stack.len() - 1;
                             let result = if self.stack[l - 1] < self.stack[l] {
-                                -1
+                                -1 // canonical true value
                             } else {
-                                0
+                                0 // false value
                             };
                             self.stack.pop();
                             self.stack.pop();
@@ -483,7 +507,7 @@ impl ForthInterpreter {
                         for (key, _) in self.defined_words.iter() {
                             print!("{key} ");
                         }
-                        println!("");
+                        println!();
                     }
                     "seeall" => {
                         for (key, definition) in self.defined_words.iter() {
@@ -636,10 +660,10 @@ impl ForthInterpreter {
                 ForthToken::Float(num) => print!("f{num} "),
                 ForthToken::Operator(op) => print!("{op} "),
                 ForthToken::Branch(info) => {
-                    print!("{}:{}:{} ", info.word, info.offset, info.conditional);
+                    print!("{}:{}:{} ", info.word, info.offset, info.branch_flag);
                 }
                 ForthToken::Forward(info) => {
-                    print!("{} {}", info.word, info.tail);
+                    print!("{}{} ", info.word, info.tail);
                 }
                 ForthToken::Empty => print!("ForthToken::Empty "),
             }

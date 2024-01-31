@@ -6,8 +6,8 @@ use crate::messages::Msg;
 use crate::reader::Reader;
 //use crate::utility;
 
-const BRANCHES: [&str; 8] = [
-    "if", "else", "then", "begin", "loop", "until", "repeat", "+loop",
+const BRANCHES: [&str; 9] = [
+    "if", "else", "then", "begin", "do", "loop", "until", "repeat", "+loop",
 ];
 const FORWARDS: [(&str, &str); 5] = [
     ("(", ")"),
@@ -41,17 +41,17 @@ impl ForwardInfo {
 
 #[derive(Debug, Clone)]
 pub struct BranchInfo {
-    pub word: String,
-    pub offset: usize,
-    pub conditional: bool,
+    pub word: String,      // word name
+    pub offset: usize,     // branch distance
+    pub branch_flag: bool, // word-specific DO uses it to know if it should take bounds off the stack
 }
 
 impl BranchInfo {
-    pub fn new(word: String, offset: usize, conditional: bool) -> BranchInfo {
+    pub fn new(word: String, offset: usize, flag: bool) -> BranchInfo {
         BranchInfo {
             word,
             offset,
-            conditional,
+            branch_flag: flag,
         }
     }
 }
@@ -85,7 +85,7 @@ impl Tokenizer {
         let token_text = self.get_token_text();
         match token_text {
             None => {
-                self.msg.error("get_token", "No token string", &token_text);
+                // self.msg.error("get_token", "No token string", &token_text);
                 return None;
             }
             Some(text) => {
@@ -94,7 +94,7 @@ impl Tokenizer {
                 } else if is_float(&text) {
                     return Some(ForthToken::Float(text.parse().unwrap()));
                 } else if BRANCHES.contains(&text.as_str()) {
-                    return Some(ForthToken::Branch(BranchInfo::new(text, 0, false)));
+                    return Some(ForthToken::Branch(BranchInfo::new(text, 0, true)));
                 } else {
                     // it's a Forward or an Operator
                     for (word, terminator) in FORWARDS {
@@ -142,8 +142,8 @@ impl Tokenizer {
             }
             'scan: for c in self.line.chars() {
                 if terminator.contains(c) {
-                    // We're done. We don't return the end_char as part of the string.
                     self.line = self.line[chars_used + 1..].to_string();
+                    token_string.push(c);
                     return Some(token_string);
                 } else if c == '\n' {
                     // end of line, so break out and get another
@@ -175,8 +175,6 @@ impl Tokenizer {
                     );
                 }
                 None => {
-                    // Reader error
-                    self.msg.error("get_token_text", "reader error", "");
                     return None;
                 }
             }
@@ -199,7 +197,7 @@ impl Tokenizer {
             self.line.clear();
             return self.get_token_text(); // go again
         } else {
-            self.line = self.line[chars_used + 1..].to_string();
+            self.line = self.line[chars_used..].to_string();
             self.msg.debug("get_token_text", "returning", &token_string);
             return Some(token_string);
         }

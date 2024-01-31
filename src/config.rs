@@ -8,7 +8,7 @@ use ::clap::{arg, Command};
 const VERSION: &str = "0.1.24.1.30";
 const WELCOME_MESSAGE: &str = "Welcome to tForth.";
 const EXIT_MESSAGE: &str = "Finished";
-const DEFAULT_CORE: &str = "core.fs";
+const DEFAULT_CORE: &str = "src/test.fs";
 
 pub struct Config {
     debug_level: DebugLevel,
@@ -68,8 +68,8 @@ impl Config {
 
         let nocore = arguments.get_one::<bool>("nocore");
         match nocore {
-            Some(_nocore) => {
-                self.no_core = true;
+            Some(nocore) => {
+                self.no_core = *nocore;
             }
             None => self.no_core = false,
         }
@@ -93,6 +93,9 @@ impl Config {
         if !self.no_core {
             if forth.load_file(self.core_file.as_str()) {
                 self.loaded_core = true;
+                forth
+                    .msg
+                    .info("MAIN", "Loaded core dictionary", &self.core_file);
             } else {
                 forth
                     .msg
