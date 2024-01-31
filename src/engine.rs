@@ -228,7 +228,7 @@ impl ForthInterpreter {
                     }
                     "s\"" => {
                         let txt = &info.tail;
-                        self.text = info.tail[..txt.len()].to_owned();
+                        self.text = info.tail[1..txt.len() - 1].to_owned();
                     }
                     "variable" => {
                         let index = self.variable_stack.len();
