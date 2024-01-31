@@ -25,6 +25,7 @@ pub struct ForthInterpreter {
     new_word_definition: Vec<ForthToken>,
     token: ForthToken,
     show_stack: bool, // show the stack at the completion of a line of interaction
+    step_mode: bool,
 }
 
 #[derive(Debug)]
@@ -57,6 +58,7 @@ impl ForthInterpreter {
                 new_word_definition: Vec::new(),
                 token: ForthToken::Empty,
                 show_stack: false,
+                step_mode: false,
             }
         } else {
             panic!("unable to create reader");
@@ -205,6 +207,7 @@ impl ForthInterpreter {
 
     fn execute_token(&mut self, mut program_counter: usize, mut jumped: bool) -> (usize, bool) {
         // Execute a defined token
+        self.step(); // gets a debug char if enabled
         program_counter += 1; // base assumption is we're processing one word
         match &self.token {
             ForthToken::Empty => return (program_counter, false),
@@ -559,6 +562,8 @@ impl ForthInterpreter {
                         // Enter compile mode
                         self.set_compile_mode(true);
                     }
+                    "step-on" => self.step_mode = true,
+                    "step-off" => self.step_mode = false,
                     "bye" => {
                         self.set_exit_flag();
                     }
@@ -684,6 +689,49 @@ impl ForthInterpreter {
             return format!("{:?}", self.stack);
         } else {
             return "".to_owned();
+        }
+    }
+
+    fn print_stack(&self) {
+        println!("{}", self.get_stack());
+    }
+
+    fn print_variables(&self) {
+        println!("Variables:");
+        for (name, val) in self.defined_variables.iter() {
+            println!("{name} = {val}");
+        }
+    }
+
+    fn step(&mut self) {
+        // controls step / debug functions
+        if self.step_mode {
+            match &self.token {
+                ForthToken::Integer(num) => print!("[{num}] Step> "),
+                ForthToken::Float(num) => print!("[f{num}] Step> "),
+                ForthToken::Operator(op) => print!("[{op}] Step> "),
+                ForthToken::Branch(info) => {
+                    print!(
+                        "[{}:{}:{}] Step> ",
+                        info.word, info.offset, info.branch_flag
+                    );
+                }
+                ForthToken::Forward(info) => {
+                    print!("[{}{}] Step> ", info.word, info.tail);
+                }
+                ForthToken::Empty => print!("[ForthToken::Empty] Step> "),
+            }
+            io::stdout().flush().unwrap();
+            match self.parser.reader.read_char() {
+                Some('s') => self.print_stack(),
+                Some('v') => self.print_variables(),
+                Some('a') => {
+                    self.print_stack();
+                    self.print_variables();
+                }
+                Some('c') => self.step_mode = false,
+                Some(_) | None => {}
+            }
         }
     }
 }

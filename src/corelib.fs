@@ -20,5 +20,17 @@
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 
-: fac ( n -- n! ) dup if 1 swap _fac else 1 then ;
-: _fac ( r n -- r ) dup if tuck * swap 1 - _fac else drop then ;
+: fac ( n -- n! ) 
+    dup 
+        if 
+            1 swap _fac 
+        else 
+            1 
+        then ;
+
+: _fac ( r n -- r ) 
+    dup if 
+        tuck * swap 1 - _fac 
+    else 
+        drop 
+    then ;

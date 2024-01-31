@@ -4,7 +4,7 @@
 
 use std::fmt;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 
 use crate::messages::{DebugLevel, Msg};
 
@@ -108,6 +108,18 @@ impl Reader {
                     Err(_) => return None,
                 }
             }
+        }
+    }
+
+    pub fn read_char(&self) -> Option<char> {
+        let mut buf = [0; 1];
+        let mut handle = io::stdin().lock();
+        let bytes_read = handle.read(&mut buf);
+        match bytes_read {
+            Ok(_size) => {
+                return Some(buf[0] as char);
+            }
+            Err(_) => None,
         }
     }
 }
