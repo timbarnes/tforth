@@ -8,7 +8,7 @@ use ::clap::{arg, Command};
 const VERSION: &str = "0.1.24.1.30";
 const WELCOME_MESSAGE: &str = "Welcome to tForth.";
 const EXIT_MESSAGE: &str = "Finished";
-const DEFAULT_CORE: &str = "src/test.fs";
+const DEFAULT_CORE: [&str; 2] = ["~/.tforth/corelib.fs", "src/corelib.fs"];
 
 pub struct Config {
     debug_level: DebugLevel,
@@ -25,7 +25,7 @@ impl Config {
             debug_level: DebugLevel::Error,
             loaded_file: "".to_owned(),
             loaded_core: false,
-            core_file: DEFAULT_CORE.to_owned(),
+            core_file: DEFAULT_CORE[0].to_owned(),
             no_core: false,
             run: true,
         }
@@ -91,12 +91,16 @@ impl Config {
         forth.msg.set_level(self.debug_level.clone());
 
         if !self.no_core {
-            if forth.load_file(self.core_file.as_str()) {
-                self.loaded_core = true;
-                forth
-                    .msg
-                    .info("MAIN", "Loaded core dictionary", &self.core_file);
-            } else {
+            for path in DEFAULT_CORE {
+                if forth.load_file(path) {
+                    self.loaded_core = true;
+                    forth
+                        .msg
+                        .info("MAIN", "Loaded core dictionary", &self.core_file);
+                    break;
+                }
+            }
+            if !self.loaded_core {
                 forth
                     .msg
                     .error("MAIN", "Unable to load core dictionary", &self.core_file);

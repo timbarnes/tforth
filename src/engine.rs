@@ -24,6 +24,7 @@ pub struct ForthInterpreter {
     new_word_name: String,
     new_word_definition: Vec<ForthToken>,
     token: ForthToken,
+    show_stack: bool, // show the stack at the completion of a line of interaction
 }
 
 #[derive(Debug)]
@@ -244,7 +245,7 @@ impl ForthInterpreter {
                                 self.word_see(&word, definition);
                             }
                             None => {
-                                self.msg.error("see", "Word not found", self.text.as_str());
+                                self.msg.error("see", "Builtin or undefined", word);
                             }
                         }
                     }
@@ -633,8 +634,7 @@ impl ForthInterpreter {
                 }
             }
             Err(error) => {
-                self.msg
-                    .error("loaded", error.to_string().as_str(), self.text.as_str());
+                self.msg.warning("loaded", error.to_string().as_str(), "");
                 self.abort_flag = true;
                 return false;
             }
