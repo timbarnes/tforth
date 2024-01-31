@@ -141,7 +141,7 @@ impl Tokenizer {
                 }
             }
             'scan: for c in self.line.chars() {
-                if terminator.contains(c) {
+                if chars_used > 0 && terminator.contains(c) {
                     self.line = self.line[chars_used + 1..].to_string();
                     token_string.push(c);
                     return Some(token_string);

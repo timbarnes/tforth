@@ -236,6 +236,18 @@ impl ForthInterpreter {
                             info.tail.clone(),
                         );
                     }
+                    "see" => {
+                        // ( "word name" -- ) print a word's definition
+                        let word = info.tail.trim();
+                        match self.defined_words.get(word) {
+                            Some(definition) => {
+                                self.word_see(&word, definition);
+                            }
+                            None => {
+                                self.msg.error("see", "Word not found", self.text.as_str());
+                            }
+                        }
+                    }
                     _ => (),
                 }
             }
@@ -515,17 +527,6 @@ impl ForthInterpreter {
                         }
                         for (key, index) in self.defined_variables.iter() {
                             self.variable_see(key, *index);
-                        }
-                    }
-                    "see" => {
-                        // ( "word name" -- ) print a word's definition
-                        match self.defined_words.get(self.text.as_str()) {
-                            Some(definition) => {
-                                self.word_see(self.text.as_str(), definition);
-                            }
-                            None => {
-                                self.msg.error("see", "Word not found", self.text.as_str());
-                            }
                         }
                     }
                     "r/w" => {
