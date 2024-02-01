@@ -24,5 +24,3 @@ Options:
 
   tForth is an interactive command-line program that can be used like a reverse-polish calculator. Operands (integers) are placed on the calculation stack. Operators consume and operate on stack elements. For example:
   '2 3 4 * +' places '2', then '3', then '4' on the stack; '*' multiplies 3 by 4, and '+' adds the result to '2'. The calculation leaves '14' on the stack as the result.
-
-  The full list of words (as they are known in forth) is described in the documentation.
