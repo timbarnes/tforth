@@ -234,7 +234,7 @@ impl ForthInterpreter {
                         let index = self.variable_stack.len();
                         self.variable_stack.push(0); // create the location for the new variable
                         self.defined_variables
-                            .insert(info.tail.clone(), index as i64);
+                            .insert(info.tail.trim().to_owned(), index as i64);
                         self.msg.warning(
                             "execute_token",
                             "Dealing with a variable called",
@@ -707,19 +707,16 @@ impl ForthInterpreter {
         // controls step / debug functions
         if self.step_mode {
             match &self.token {
-                ForthToken::Integer(num) => print!("[{num}] Step> "),
-                ForthToken::Float(num) => print!("[f{num}] Step> "),
-                ForthToken::Operator(op) => print!("[{op}] Step> "),
+                ForthToken::Integer(num) => print!("{num}: Step> "),
+                ForthToken::Float(num) => print!("f{num}: Step> "),
+                ForthToken::Operator(op) => print!("{op}: Step> "),
                 ForthToken::Branch(info) => {
-                    print!(
-                        "[{}:{}:{}] Step> ",
-                        info.word, info.offset, info.branch_flag
-                    );
+                    print!("{}:{}:{}: Step> ", info.word, info.offset, info.branch_flag);
                 }
                 ForthToken::Forward(info) => {
-                    print!("[{}{}] Step> ", info.word, info.tail);
+                    print!("{}{}: Step> ", info.word, info.tail);
                 }
-                ForthToken::Empty => print!("[ForthToken::Empty] Step> "),
+                ForthToken::Empty => print!("ForthToken::Empty: Step> "),
             }
             io::stdout().flush().unwrap();
             match self.parser.reader.read_char() {
