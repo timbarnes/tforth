@@ -20,6 +20,7 @@
 : bl 20 ; ( puts the character code for a space on the stack )
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
+: endif then ; ( synonym for then, to allow if - else - endif conditionals )
 
 : fac ( n -- n! ) 
     dup 
