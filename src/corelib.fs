@@ -18,9 +18,16 @@
 : dbg-warning 1 dbg ;
 : dbg-quiet 0 dbg ;
 : bl 20 ; ( puts the character code for a space on the stack )
+: cr 10 ; ( puts the character code for a carriage return on the stack )
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )
+
+( Test Functions: place desired result on the stack, 
+  then push args to the test word, then the word, then test-single.
+  If the desired result is equal to the top of the stack, the test passes. )
+: test-single ( m n.. -- b ) = if ." Passed" else ." Failed"  then ;
+: test-dual ( j k n.. -- b ) rot = rot rot = and if ." Passed" else ." Failed" then ;
 
 : fac ( n -- n! ) 
     dup 

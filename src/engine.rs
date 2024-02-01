@@ -227,7 +227,7 @@ impl ForthInterpreter {
                 match info.word.as_str() {
                     "(" => {} // ignore comments
                     ".\"" => {
-                        let tail = &info.tail[..info.tail.len()];
+                        let tail = &info.tail[1..info.tail.len() - 1];
                         println!("{}", tail);
                     }
                     "s\"" => {
