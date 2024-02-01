@@ -18,14 +18,18 @@ Options:
   -h, --help                Print help
   -V, --version             Print version'
 
-
-| '--library' | allows a library other than the core library to be installed. |
-| '--nocore' | suppresses loading of the core library |
-| '--file' | allows a user-defined file to be loaded, after (or without) the core file. |
+| Option      | Application                                                                |
+| ----------- | -------------------------------------------------------------------------- |
+| '--library' | allows a library other than the core library to be installed.              |
+| '--nocore'  | suppresses loading of the core library                                     |
+| '--file'    | allows a user-defined file to be loaded, after (or without) the core file. |
 
   tForth is an interactive command-line program that can be used like a reverse-polish calculator. Operands (integers) are placed on the calculation stack. Operators consume and operate on stack elements. For example:
 
-| '2 3 4 * +' places '2', then '3', then '4' on the stack; |
-| '*' multiplies 3 by 4, and |
-| '+' adds the result to '2'. |
-| The calculation leaves '14' on the stack as the result.|
+| Code  | Example                            |
+| ----- | ---------------------------------- |
+| '2'   | places '2' on the stack            |
+| '3 4' | places '3', then '4' on the stack; |
+| '*'   | multiplies 3 by 4, and             |
+| '+'   | adds the result to '2'.            |
+| 14    | The result is left on the stack.   |
