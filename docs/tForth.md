@@ -4,7 +4,15 @@
 tForth is a simple implementation of some basic Forth language capabilities. Where possible, I have followed the [Forth standard:](https://forth-standard.org). My intent was to simultaneously learn Forth and Rust. 
 
 The program relies on a Rust binary, and a source file containing library functions (currently quite small).
-The program should be installed anywhere, but the default location for the library file is '~/.tforth/corelib.fs'.
+The program can be installed anywhere, but the default location for the library file is '~/.tforth/corelib.fs'.
+
+The simplest way to use tForth is as a reverse-polish calculator. Entering a number places it on the stack; operations consume stack values and push the result of their operation on the stack. Note that in almost all cased, line endings are unimportant. Tokens can be separated by space, tab, or newline. The parser and engine keep going so long as input is provided. Some simple examples:
+
+| code      | description                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `2 3 * .` | Places `2` on the stack, then `3` on the stack. `3` is the top of the stack.`*` multiplies the two numbers (popping them off the stack as it does so) and leaves the product on the stack. `.` pops the stack and prints the number, in this case `6`. Following these operations the stack is empty. |
+| `5 dup +` | Places a `5` on the stack, duplicates it, leaving the stack with` [5, 5]`. +`adds the two numbers, leaving `10` on the stack.                                                                                                                                                                         |
+| `bye`     | Causes tForth to close.                                                                                                                                                                                                                                                                               |
 
 ## Command line Options
 tForth responds to the following command line options:
@@ -56,13 +64,13 @@ tForth responds to the following command line options:
  
  | word | stack signature  | usage                                                                                               |
  | ---- | ---------------- | --------------------------------------------------------------------------------------------------- |
- | `+`  | (m n -- m+n )    | Adds the top two numbers on the stack, leaving the sum on the stack                                 |
+ | `+`  | `( m n -- m+n )` | Adds the top two numbers on the stack, leaving the sum on the stack                                 |
  | `-`  | `( m n -- m-n )` | Subtracts the top of the stack from the element below, leaving the result on the stack.             |
  | `*`  | `( m n -- m*n )` | Multiplies the top two stack elements, leaving the result on the stack.                             |
  | `/`  | `( m n -- m/n )` | Divides the 2nd item by the top item, leaving the result on the stack.                              |
- | `<`  | ( m n -- b )     | if m < n, place the true value (-1) on the stack.                                                   |
- | `>`  | (m n -- b )      | If m > n, then push true, otherwise push false                                                      |
- | `0=` | ( n -- b )       | If the number on the stack is zero, replace it with true (-1); otherwise replace it with false (0). |
+ | `<`  | `( m n -- b )`   | if m < n, place the true value (-1) on the stack.                                                   |
+ | `>`  | `( m n -- b )`   | If m > n, then push true, otherwise push false                                                      |
+ | `0=` | `( n -- b )`     | If the number on the stack is zero, replace it with true (-1); otherwise replace it with false (0). |
 
  ## Stack manipulation 
 
