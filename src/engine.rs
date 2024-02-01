@@ -65,6 +65,10 @@ impl ForthInterpreter {
         }
     }
 
+    pub fn set_abort_flag(&mut self, v: bool) {
+        self.abort_flag = v;
+    }
+
     fn set_exit_flag(&mut self) {
         // Method executed by "bye"
         self.exit_flag = true;

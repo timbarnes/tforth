@@ -36,3 +36,5 @@
     else 
         drop 
     then ;
+
+." Library loaded."
