@@ -369,6 +369,13 @@ impl ForthInterpreter {
                             self.msg.error(".", "Stack Underflow", "")
                         }
                     }
+                    ".." => {
+                        if let Some(a) = self.stack.pop() {
+                            print!("{a}");
+                        } else {
+                            self.msg.error("..", "Stack Underflow", "")
+                        }
+                    }
                     "true" => {
                         self.stack.push(0);
                     }
@@ -543,6 +550,9 @@ impl ForthInterpreter {
                         for (key, index) in self.defined_variables.iter() {
                             self.variable_see(key, *index);
                         }
+                    }
+                    "stack-depth" => {
+                        self.stack.push(self.stack.len() as i64);
                     }
                     "r/w" => {
                         self.file_mode = FileMode::ReadWrite;

@@ -29,8 +29,9 @@
   Relies on a variable that indicates the number of the test. )
 
 variable test-num 0 test-num !
-: test-single ( m n.. -- b ) dup test-num @ dup . 1+ test-num ! = if ." Passed" else ." Failed"  then drop ;
-: test-dual ( j k n.. -- b ) rot test-num @ dup . 1+ test-num ! = rot rot dup = and if ." Passed" else ." Failed" then drop drop ;
+: test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 0= if ."  Fassed" else ."  Failed" then drop ;
+: test-single ( m n.. -- b ) dup test-num @ dup .. 1+ test-num ! = if ."  Passed" else ."  Failed"  then drop ;
+: test-dual ( j k n.. -- b ) rot test-num @ dup .. 1+ test-num ! = rot rot dup = and if ."  Passed" else ."  Failed" then drop drop ;
 
 : fac ( n -- n! ) 
     dup 
