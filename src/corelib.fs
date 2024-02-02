@@ -6,13 +6,11 @@
 : pop ( a -- ) drop ;
 : 2dup ( a b -- a b a b ) over over ;
 : ?dup dup 0= if dup else then ;
-: > < negate ;
+: > < if false else true then ;
 : <> (n -- n ) = 0= ;
 : min ( m n -- m | n ) 2dup < if drop else nip then ;
 : max ( m n -- m | n ) 2dup > if drop else nip then ;
 : abs (n -- n | -n ) dup 0 < if -1 * then ;
-: false ( -- -1 ) -1 ;
-: true ( -- 0 ) 0 ;
 : dbg-debug 3 dbg ;
 : dbg-info 2 dbg ;
 : dbg-warning 1 dbg ;
@@ -29,9 +27,12 @@
   Relies on a variable that indicates the number of the test. )
 
 variable test-num 0 test-num !
-: test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 0= if ."  Fassed" else ."  Failed" then drop ;
-: test-single ( m n.. -- b ) dup test-num @ dup .. 1+ test-num ! = if ."  Passed" else ."  Failed"  then drop ;
-: test-dual ( j k n.. -- b ) rot test-num @ dup .. 1+ test-num ! = rot rot dup = and if ."  Passed" else ."  Failed" then drop drop ;
+: test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 
+    0= if ."  Fassed" else ."  Failed" then drop ;
+: test-single ( m n.. -- b ) dup test-num @ dup .. 1+ test-num ! 
+    = if ."  Passed" else ."  Failed"  then drop ;
+: test-dual ( j k n.. -- b ) rot test-num @ dup .. 1+ test-num ! = rot rot dup 
+    = and if ."  Passed" else ."  Failed" then drop drop ;
 
 : fac ( n -- n! ) 
     dup 

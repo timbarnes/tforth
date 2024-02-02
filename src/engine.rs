@@ -377,10 +377,10 @@ impl ForthInterpreter {
                         }
                     }
                     "true" => {
-                        self.stack.push(0);
+                        self.stack.push(-1);
                     }
                     "false" => {
-                        self.stack.push(-1);
+                        self.stack.push(0);
                     }
                     "=" => {
                         if self.stack_underflow("=", 2) {
