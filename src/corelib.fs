@@ -28,7 +28,7 @@
 
 variable test-num 0 test-num !
 : test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 
-    0= if ."  Passed" else ."    Failed" test-num @ then drop ;
+    0= if ."  Passed" else ."    Failed" test-num @ then ;
 
 : test-single ( m n.. -- b ) test-num @ dup .. 1+ test-num ! 
     = if ."  Passed" else ."    Failed"  test-num @ then  ;

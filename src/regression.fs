@@ -60,7 +60,7 @@ false 55 0< test-single
 100 drop test-none
 5 5 6 drop test-single
 5 6 5 nip test-single
-1 2 3 4 5 6 stack-depth test-single drop drop drop drop drop drop
+1 2 3 4 5 6 stack-depth test-single drop drop drop drop drop
 17 17 17 dup test-dual
 4 7 7 4 swap test-dual
 5 12 5 12 over drop test-dual
