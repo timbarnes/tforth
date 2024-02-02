@@ -40,6 +40,8 @@ variable test-num 0 test-num !
 
 : run-regression clear s" src/regression.fs" loaded ;
 
+
+( Application functions )
 : fac ( n -- n! ) 
     dup 
         if 

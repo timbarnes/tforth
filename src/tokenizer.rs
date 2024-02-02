@@ -69,7 +69,7 @@ impl Tokenizer {
         Tokenizer {
             line: String::new(),
             token_string: String::new(),
-            reader: reader,
+            reader,
             msg: Msg::new(),
         }
     }
@@ -86,15 +86,15 @@ impl Tokenizer {
         match token_text {
             None => {
                 // self.msg.error("get_token", "No token string", &token_text);
-                return None;
+                None
             }
             Some(text) => {
                 if is_integer(&text) {
-                    return Some(ForthToken::Integer(text.parse().unwrap()));
+                    Some(ForthToken::Integer(text.parse().unwrap()))
                 } else if is_float(&text) {
-                    return Some(ForthToken::Float(text.parse().unwrap()));
+                    Some(ForthToken::Float(text.parse().unwrap()))
                 } else if BRANCHES.contains(&text.as_str()) {
-                    return Some(ForthToken::Branch(BranchInfo::new(text, 0, true)));
+                    Some(ForthToken::Branch(BranchInfo::new(text, 0, true)))
                 } else {
                     // it's a Forward or an Operator
                     for (word, terminator) in FORWARDS {
@@ -103,8 +103,8 @@ impl Tokenizer {
                                 Some(remainder) => {
                                     return Some(ForthToken::Forward(ForwardInfo::new(
                                         text.to_owned(),
-                                        format!("{remainder}"),
-                                    )));
+                                        remainder.to_string(),
+                                    )))
                                 }
                                 None => {
                                     return Some(ForthToken::Forward(ForwardInfo::new(
@@ -115,7 +115,7 @@ impl Tokenizer {
                             }
                         }
                     }
-                    return Some(ForthToken::Operator(text.to_owned()));
+                    Some(ForthToken::Operator(text.to_owned()))
                 }
             }
         }
@@ -195,11 +195,11 @@ impl Tokenizer {
             self.msg
                 .debug("get_token_text", "end of line", &token_string);
             self.line.clear();
-            return self.get_token_text(current_stack); // go again
+            self.get_token_text(current_stack) // go again
         } else {
             self.line = self.line[chars_used..].to_string();
             self.msg.debug("get_token_text", "returning", &token_string);
-            return Some(token_string);
+            Some(token_string)
         }
     }
 }

@@ -57,7 +57,7 @@ impl ForthInterpreter {
                 abort_flag: false,
                 exit_flag: false,
                 msg: Msg::new(),
-                parser: parser,
+                parser,
                 new_word_name: String::new(),
                 new_word_definition: Vec::new(),
                 token: ForthToken::Empty,
@@ -103,10 +103,10 @@ impl ForthInterpreter {
     fn pop_one(&mut self, word: &str) -> Option<i64> {
         let val = self.stack.pop();
         match val {
-            Some(value) => return Some(value),
+            Some(value) => Some(value),
             None => {
                 self.msg.error(word, "Stack underflow", "");
-                return None;
+                None
             }
         }
     }
@@ -115,14 +115,12 @@ impl ForthInterpreter {
         let (val1, val2) = (self.stack.pop(), self.stack.pop());
         match val1 {
             Some(value1) => match val2 {
-                Some(value2) => {
-                    return Some((value1, value2));
-                }
+                Some(value2) => Some((value1, value2)),
                 None => None,
             },
             None => {
                 self.msg.error(word, "Stack underflow", "");
-                return None;
+                None
             }
         }
     }
@@ -147,10 +145,10 @@ impl ForthInterpreter {
                         }
                     }
                 }
-                return true;
+                true
             }
             None => {
-                return false; // Signals end of file
+                false // Signals end of file
             }
         }
     }
@@ -194,47 +192,50 @@ impl ForthInterpreter {
         let mut idx = 0; // points to the current token
         while idx < self.new_word_definition.len() {
             let cur_token = &self.new_word_definition[idx];
-            match cur_token {
-                ForthToken::Branch(branch_info) => {
-                    match branch_info.word.as_str() {
-                        "if" => {
-                            // put the info on the stack
-                            branch_stack.push(("if", idx));
-                        }
-                        "else" => {
-                            // pop stack, insert new ZeroEqual Branch token with offset
-                            if let Some((_word, place)) = branch_stack.pop() {
-                                self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new("if".to_string(), idx - place, true),
-                                );
-                            }
-                            branch_stack.push(("else", idx));
-                        }
-                        "then" => {
-                            // pop stack, insert new Unconditional Branch token with offset
-                            if let Some((word, place)) = branch_stack.pop() {
-                                self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new(word.to_string(), idx - place, true),
-                                );
-                            }
-                        }
-                        "do" => {
-                            // push onto branch_stack
-                            branch_stack.push(("do", idx));
-                        }
-                        "loop" => {
-                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                            if let Some((word, place)) = branch_stack.pop() {
-                                self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new(word.to_string(), idx - place, true),
-                                );
-                                // need to put in a value for move direction
-                            }
-                        }
-                        _ => (),
+            if let ForthToken::Branch(branch_info) = cur_token {
+                match branch_info.word.as_str() {
+                    "if" => {
+                        // put the info on the stack
+                        branch_stack.push(("if", idx));
                     }
+                    "else" => {
+                        // pop stack, insert new ZeroEqual Branch token with offset
+                        if let Some((_word, place)) = branch_stack.pop() {
+                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
+                                "if".to_string(),
+                                idx - place,
+                                true,
+                            ));
+                        }
+                        branch_stack.push(("else", idx));
+                    }
+                    "then" => {
+                        // pop stack, insert new Unconditional Branch token with offset
+                        if let Some((word, place)) = branch_stack.pop() {
+                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
+                                word.to_string(),
+                                idx - place,
+                                true,
+                            ));
+                        }
+                    }
+                    "do" => {
+                        // push onto branch_stack
+                        branch_stack.push(("do", idx));
+                    }
+                    "loop" => {
+                        // pop branch_stack, and set delta into loop as a negative distance, to jump back
+                        if let Some((word, place)) = branch_stack.pop() {
+                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
+                                word.to_string(),
+                                idx - place,
+                                true,
+                            ));
+                            // need to put in a value for move direction
+                        }
+                    }
+                    _ => (),
                 }
-                _ => (),
             }
             idx += 1;
         }
@@ -250,8 +251,7 @@ impl ForthInterpreter {
                 self.stack.push(*num);
             }
             ForthToken::Float(_num) => {
-                // stack needs to support floats, ints, and pointers
-                // self.stack.push(num);
+                // TBD: a separate stack is used for floating point calculations
             }
             ForthToken::Forward(info) => {
                 // need a better way to capture forward and branch types' unique behaviors
@@ -279,7 +279,7 @@ impl ForthInterpreter {
                     "see" => {
                         // ( "word name" -- ) print a word's definition or
                         // a builtin's documentation string
-                        self.word_see(&info.tail.trim());
+                        self.word_see(info.tail.trim());
                     }
                     _ => (),
                 }
@@ -385,16 +385,13 @@ impl ForthInterpreter {
                     "emit" => {
                         if !self.stack_underflow("echo", 1) {
                             let n = self.stack.pop();
-                            match n {
-                                Some(n) => {
-                                    if n >= 0x20 && n <= 0x7f {
-                                        let c = n as u8 as char;
-                                        print!("{}", c);
-                                    } else {
-                                        self.msg.error("EMIT", "Arg out of range", n);
-                                    }
+                            if let Some(n) = n {
+                                if (0x20..=0x7f).contains(&n) {
+                                    let c = n as u8 as char;
+                                    print!("{}", c);
+                                } else {
+                                    self.msg.error("EMIT", "Arg out of range", n);
                                 }
-                                None => {}
                             }
                         }
                     }
@@ -413,7 +410,7 @@ impl ForthInterpreter {
                         }
                     }
                     "drop" => {
-                        if self.stack.len() > 0 {
+                        if !self.stack.is_empty() {
                             self.stack.pop();
                         } else {
                             self.msg.warning("DROP", "Stack is empty.", "");
@@ -554,7 +551,7 @@ impl ForthInterpreter {
                 }
             }
         }
-        return (program_counter, jumped);
+        (program_counter, jumped)
     }
 
     fn execute_definition(&mut self) {
@@ -582,13 +579,12 @@ impl ForthInterpreter {
                     self.stack.push(self.defined_variables[word_name]); // push the index on the stack
                 } else {
                     self.msg
-                        .error("execute_definition", "Undefined word", &word_name);
+                        .error("execute_definition", "Undefined word", word_name);
                     return;
                 }
             }
             _ => {
                 self.msg.error("execute_definition", "Definition error", "");
-                return;
             }
         }
     }
@@ -615,19 +611,19 @@ impl ForthInterpreter {
                             }
                         }
                         std::mem::swap(&mut self.parser.reader, &mut previous_reader);
-                        return true;
+                        true
                     }
                     None => {
                         self.abort_flag = true;
                         self.msg.error("loaded", "Failed to create new reader", "");
-                        return false;
+                        false
                     }
                 }
             }
             Err(error) => {
                 self.msg.warning("loaded", error.to_string().as_str(), "");
                 self.abort_flag = true;
-                return false;
+                false
             }
         }
     }
@@ -672,7 +668,7 @@ impl ForthInterpreter {
                     Some(doc_string) => {
                         println!("Builtin: {name} {doc_string}");
                     }
-                    None => self.msg.warning("SEE", "Word not found", &name),
+                    None => self.msg.warning("SEE", "Word not found", name),
                 }
             }
         }
@@ -680,9 +676,9 @@ impl ForthInterpreter {
 
     fn get_stack(&self) -> String {
         if self.show_stack {
-            return format!("{:?}", self.stack);
+            format!("{:?}", self.stack)
         } else {
-            return "".to_owned();
+            "".to_owned()
         }
     }
 

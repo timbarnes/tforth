@@ -26,17 +26,12 @@ impl Msg {
     }
 
     pub fn get_level(&self) -> DebugLevel {
-        return self.debug_level.clone();
+        self.debug_level.clone()
     }
 
     pub fn debug<T: Debug>(&self, context: &str, text: &str, val: T) {
-        match self.debug_level {
-            DebugLevel::Debug => {
-                println!("DEBUG: {context}: {text}: {:?}", val);
-            }
-            _ => {
-                return;
-            }
+        if let DebugLevel::Debug = self.debug_level {
+            println!("DEBUG: {context}: {text}: {:?}", val);
         }
     }
 
@@ -45,9 +40,7 @@ impl Msg {
             DebugLevel::Info | DebugLevel::Debug => {
                 println!("INFO: {context}: {text}: {:?}", val);
             }
-            _ => {
-                return;
-            }
+            _ => {}
         }
     }
 
@@ -56,9 +49,7 @@ impl Msg {
             DebugLevel::Warning | DebugLevel::Info | DebugLevel::Debug => {
                 println!("WARNING: {context}: {text}: {:?}", val);
             }
-            _ => {
-                return;
-            }
+            _ => {}
         }
     }
 

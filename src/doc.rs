@@ -122,5 +122,5 @@ pub fn build_doc_strings() -> HashMap<String, String> {
     );
     doc!(";", "Exits compile mode and saves the definition");
 
-    return doc_strings;
+    doc_strings
 }

@@ -38,28 +38,24 @@ impl Reader {
         let mut message_handler = Msg::new();
         message_handler.set_level(DebugLevel::Error);
         match file_path {
-            None => {
-                return Some(Reader {
-                    source: Source::Stdin,
-                    prompt: prompt.to_owned(),
-                    cont_prompt: cont_prompt.to_owned(),
-                    msg: msg_handler,
-                });
-            }
+            None => Some(Reader {
+                source: Source::Stdin,
+                prompt: prompt.to_owned(),
+                cont_prompt: cont_prompt.to_owned(),
+                msg: msg_handler,
+            }),
             Some(filepath) => {
                 let file = File::open(filepath);
                 match file {
-                    Ok(file) => {
-                        return Some(Reader {
-                            source: Source::Stream(BufReader::new(file)),
-                            prompt: prompt.to_owned(),
-                            cont_prompt: cont_prompt.to_owned(),
-                            msg: msg_handler,
-                        });
-                    }
+                    Ok(file) => Some(Reader {
+                        source: Source::Stream(BufReader::new(file)),
+                        prompt: prompt.to_owned(),
+                        cont_prompt: cont_prompt.to_owned(),
+                        msg: msg_handler,
+                    }),
                     Err(_) => {
                         msg_handler.error("Reader::new", "File not able to be opened", file_path);
-                        return None;
+                        None
                     }
                 }
             }
@@ -84,12 +80,12 @@ impl Reader {
                 match io::stdin().read_line(&mut new_line) {
                     Ok(_) => {
                         self.msg.debug("get_line", "Got some values", &new_line);
-                        return Some(new_line);
+                        Some(new_line)
                     }
                     Err(error) => {
                         self.msg
-                            .error("get_line", "read_line error", &error.to_string());
-                        return None;
+                            .error("get_line", "read_line error", error.to_string());
+                        None
                     }
                 }
             }
@@ -100,12 +96,12 @@ impl Reader {
                 match chars_read {
                     Ok(chars) => {
                         if *chars > 0 {
-                            return Some(new_line);
+                            Some(new_line)
                         } else {
-                            return None;
+                            None
                         }
                     }
-                    Err(_) => return None,
+                    Err(_) => None,
                 }
             }
         }
@@ -116,9 +112,7 @@ impl Reader {
         let mut handle = io::stdin().lock();
         let bytes_read = handle.read(&mut buf);
         match bytes_read {
-            Ok(_size) => {
-                return Some(buf[0] as char);
-            }
+            Ok(_size) => Some(buf[0] as char),
             Err(_) => None,
         }
     }

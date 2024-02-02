@@ -50,36 +50,30 @@ impl Config {
             .get_matches();
 
         let debuglevel = arguments.get_one::<String>("debuglevel");
-        match debuglevel {
-            Some(debuglevel) => match debuglevel.as_str() {
+        if let Some(debuglevel) = debuglevel {
+            match debuglevel.as_str() {
                 "debug" => self.debug_level = DebugLevel::Debug,
                 "info" => self.debug_level = DebugLevel::Info,
                 "warning" => self.debug_level = DebugLevel::Warning,
                 _ => self.debug_level = DebugLevel::Error,
-            },
-            None => {}
+            }
         }
 
         let library = arguments.get_one::<String>("library");
-        match library {
-            Some(lib) => self.core_file = lib.to_string(),
-            None => {}
+        if let Some(lib) = library {
+            self.core_file = lib.to_string();
         }
 
         let nocore = arguments.get_one::<bool>("nocore");
-        match nocore {
-            Some(nocore) => {
-                self.no_core = *nocore;
-            }
-            None => self.no_core = false,
+        if let Some(nc) = nocore {
+            self.no_core = *nc;
         }
 
         let file = arguments.get_one::<String>("file");
-        match file {
-            Some(file) => self.loaded_file = file.clone(),
-            None => {}
+        if let Some(file) = file {
+            self.loaded_file = file.clone();
         }
-        return self;
+        self
     }
 
     pub fn run_forth(&mut self) {
@@ -113,6 +107,7 @@ impl Config {
                     .error("MAIN", "Unable to load userfile", &self.loaded_file);
             }
         }
+
         forth.set_abort_flag(false); // abort flag may have been set by load_file, but is no longer needed.
 
         /*
