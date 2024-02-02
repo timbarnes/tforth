@@ -28,11 +28,11 @@
 
 variable test-num 0 test-num !
 : test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 
-    0= if ."  Fassed" else ."  Failed" then drop ;
-: test-single ( m n.. -- b ) dup test-num @ dup .. 1+ test-num ! 
-    = if ."  Passed" else ."  Failed"  then drop ;
+    0= if ."  Passed" else ."    Failed"  then drop ;
+: test-single ( m n.. -- b ) test-num @ dup .. 1+ test-num ! 
+    = if ."  Passed" else ."    Failed"  then  ;
 : test-dual ( j k n.. -- b ) rot test-num @ dup .. 1+ test-num ! = rot rot dup 
-    = and if ."  Passed" else ."  Failed" then drop drop ;
+    = and if ."  Passed" else ."    Failed"  then drop ;
 
 : fac ( n -- n! ) 
     dup 
