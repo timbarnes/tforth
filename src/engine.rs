@@ -395,7 +395,7 @@ impl ForthInterpreter {
                     }
                     "0=" => {
                         if let Some(a) = self.stack.pop() {
-                            self.stack.push(if a == 0 { 0 } else { 1 });
+                            self.stack.push(if a == 0 { -1 } else { 0 });
                         }
                     }
                     "0<" => {
