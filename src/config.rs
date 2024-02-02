@@ -5,7 +5,7 @@ use crate::messages::DebugLevel;
 
 use ::clap::{arg, Command};
 
-const VERSION: &str = "0.1.24.1.30";
+const VERSION: &str = "0.1.24.2.1";
 const WELCOME_MESSAGE: &str = "Welcome to tForth.";
 const EXIT_MESSAGE: &str = "Finished";
 const DEFAULT_CORE: [&str; 2] = ["~/.tforth/corelib.fs", "src/corelib.fs"];
