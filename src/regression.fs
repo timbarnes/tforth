@@ -14,6 +14,12 @@ variable test-num 0 test-num !
 -10 5 15 - test-single
 -20 2 -10 * test-single
 4 12 3 / test-single
+-1 1 3 > test-single
+0 3 1 > test-single
+-1 5 2 < test-single
+0 2 5 < test-single
+0 -5 0= test-single
 
 17 17 17 dup test-dual
--1 -5 -5 0= test-dual
+-1 1 3 > test-single
+0 3 1 > test-single
