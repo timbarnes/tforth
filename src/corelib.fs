@@ -28,18 +28,24 @@
 
 variable test-num 0 test-num !
 : test-none ( .. -- ) stack-depth  test-num @ dup .. 1+ test-num ! 
-    0= if ."  Passed" else ."    Failed"  then drop ;
+    0= if ."  Passed" else ."    Failed" test-num @ then drop ;
+
 : test-single ( m n.. -- b ) test-num @ dup .. 1+ test-num ! 
-    = if ."  Passed" else ."    Failed"  then  ;
+    = if ."  Passed" else ."    Failed"  test-num @ then  ;
+
 : test-dual ( j k n.. -- b ) rot test-num @ dup .. 1+ test-num ! = rot rot dup 
-    = and if ."  Passed" else ."    Failed"  then drop ;
+    = and if ."  Passed" else ."    Failed" test-num @ then drop ;
+
+: test-results stack-depth 0= if ." All tests passed!" else ." The following tests failed: " .s clear then ;
+
+: run-regression clear s" src/regression.fs" loaded ;
 
 : fac ( n -- n! ) 
     dup 
         if 
             1 swap _fac 
         else 
-            1 
+            drop 1 
         then ;
 
 : _fac ( r n -- r ) 

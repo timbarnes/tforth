@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::io::{self, Write};
 
+use crate::doc;
 use crate::messages::{DebugLevel, Msg};
 use crate::reader::Reader;
 use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
@@ -14,6 +15,7 @@ pub struct ForthInterpreter {
     pub variable_stack: Vec<i64>,                        // where variables are stored
     pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
     pub control_stack: Vec<i64>,                         // for do loops etc.
+    builtin_doc: HashMap<String, String>,                // doc strings for built-in words
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
@@ -39,6 +41,7 @@ enum FileMode {
 impl ForthInterpreter {
     // ForthInterpreter struct implementations
     pub fn new(main_prompt: &str, multiline_prompt: &str) -> ForthInterpreter {
+        let doc_strings = doc::build_doc_strings();
         if let Some(reader) = Reader::new(None, main_prompt, multiline_prompt, Msg::new()) {
             let parser = Tokenizer::new(reader);
             ForthInterpreter {
@@ -48,6 +51,7 @@ impl ForthInterpreter {
                 variable_stack: Vec::new(),
                 defined_variables: HashMap::new(),
                 control_stack: Vec::new(),
+                builtin_doc: doc_strings,
                 file_mode: FileMode::Unset,
                 compile_mode: false,
                 abort_flag: false,
@@ -93,6 +97,33 @@ impl ForthInterpreter {
             true
         } else {
             false
+        }
+    }
+
+    fn pop_one(&mut self, word: &str) -> Option<i64> {
+        let val = self.stack.pop();
+        match val {
+            Some(value) => return Some(value),
+            None => {
+                self.msg.error(word, "Stack underflow", "");
+                return None;
+            }
+        }
+    }
+
+    fn pop_two(&mut self, word: &str) -> Option<(i64, i64)> {
+        let (val1, val2) = (self.stack.pop(), self.stack.pop());
+        match val1 {
+            Some(value1) => match val2 {
+                Some(value2) => {
+                    return Some((value1, value2));
+                }
+                None => None,
+            },
+            None => {
+                self.msg.error(word, "Stack underflow", "");
+                return None;
+            }
         }
     }
 
@@ -246,16 +277,9 @@ impl ForthInterpreter {
                         );
                     }
                     "see" => {
-                        // ( "word name" -- ) print a word's definition
-                        let word = info.tail.trim();
-                        match self.defined_words.get(word) {
-                            Some(definition) => {
-                                self.word_see(&word, definition);
-                            }
-                            None => {
-                                self.msg.error("see", "Builtin or undefined", word);
-                            }
-                        }
+                        // ( "word name" -- ) print a word's definition or
+                        // a builtin's documentation string
+                        self.word_see(&info.tail.trim());
                     }
                     _ => (),
                 }
@@ -307,102 +331,43 @@ impl ForthInterpreter {
                 }
             }
             ForthToken::Operator(op) => {
+                macro_rules! pop2_push1 {
+                    // Helper macro
+                    ($word:expr, $expression:expr) => {
+                        if let Some((j, k)) = self.pop_two(&$word) {
+                            self.stack.push($expression(k, j));
+                        }
+                    };
+                }
+                macro_rules! pop1_push1 {
+                    // Helper macro
+                    ($word:expr, $expression:expr) => {
+                        if let Some(x) = self.pop_one(&$word) {
+                            self.stack.push($expression(x));
+                        }
+                    };
+                }
+                macro_rules! pop1 {
+                    ($word:expr, $code:expr) => {
+                        if let Some(x) = self.pop_one(&$word) {
+                            $code(x);
+                        }
+                    };
+                }
                 match op.as_str() {
-                    "+" => {
-                        if self.stack_underflow("+", 2) {
-                            ()
-                        } else {
-                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                                self.stack.push(a + b);
-                            }
-                        }
-                    }
-                    "-" => {
-                        if self.stack_underflow("-", 2) {
-                            ()
-                        } else {
-                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                                self.stack.push(b - a);
-                            }
-                        }
-                    }
-                    "*" => {
-                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                            self.stack.push(a * b);
-                        } else {
-                            self.msg.error("*", "Stack Underflow", "")
-                        }
-                    }
-                    "/" => {
-                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                            self.stack.push(b / a);
-                        } else {
-                            self.msg.error("/", "Stack Underflow", "")
-                        }
-                    }
-                    "mod" => {
-                        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                            self.stack.push(b % a);
-                        } else {
-                            self.msg.error("MOD", "Stack Underflow", "")
-                        }
-                    }
-                    "<" => {
-                        if self.stack_underflow("<", 2) {
-                            self.abort_flag = true;
-                        } else {
-                            let l = self.stack.len() - 1;
-                            let result = if self.stack[l - 1] < self.stack[l] {
-                                -1 // canonical true value
-                            } else {
-                                0 // false value
-                            };
-                            self.stack.pop();
-                            self.stack.pop();
-                            self.stack.push(result);
-                        }
-                    }
-                    "." => {
-                        if let Some(a) = self.stack.pop() {
-                            println!("{a}");
-                        } else {
-                            self.msg.error(".", "Stack Underflow", "")
-                        }
-                    }
-                    ".." => {
-                        if let Some(a) = self.stack.pop() {
-                            print!("{a}");
-                        } else {
-                            self.msg.error("..", "Stack Underflow", "")
-                        }
-                    }
-                    "true" => {
-                        self.stack.push(-1);
-                    }
-                    "false" => {
-                        self.stack.push(0);
-                    }
-                    "=" => {
-                        if self.stack_underflow("=", 2) {
-                            ()
-                        } else {
-                            if let Some(a) = self.stack.pop() {
-                                if let Some(b) = self.stack.pop() {
-                                    self.stack.push(if a == b { -1 } else { 0 });
-                                }
-                            }
-                        }
-                    }
-                    "0=" => {
-                        if let Some(a) = self.stack.pop() {
-                            self.stack.push(if a == 0 { -1 } else { 0 });
-                        }
-                    }
-                    "0<" => {
-                        if let Some(a) = self.stack.pop() {
-                            self.stack.push(if a < 0 { -1 } else { 0 });
-                        }
-                    }
+                    "+" => pop2_push1!("+", |a, b| a + b),
+                    "-" => pop2_push1!("-", |a, b| a - b),
+                    "*" => pop2_push1!("*", |a, b| a * b),
+                    "/" => pop2_push1!("/", |a, b| a / b),
+                    "mod" => pop2_push1!("mod", |a, b| a % b),
+                    "<" => pop2_push1!("<", |a, b| if a < b { -1 } else { 0 }),
+                    "." => pop1!(".", |a| print!("{a}")),
+                    ".." => pop1!("..", |a| print!("{a}")),
+                    "true" => self.stack.push(-1),
+                    "false" => self.stack.push(0),
+                    "=" => pop2_push1!("=", |a, b| if a == b { -1 } else { 0 }),
+                    "0=" => pop1_push1!("0=", |a| if a == 0 { -1 } else { 0 }),
+                    "0<" => pop1_push1!("0<", |a| if a < 0 { -1 } else { 0 }),
                     ".s" => {
                         // print stack contents
                         println!("{:?}", self.stack);
@@ -417,16 +382,16 @@ impl ForthInterpreter {
                         // print the saved string
                         println!("{:?}", self.text);
                     }
-                    "echo" => {
+                    "emit" => {
                         if !self.stack_underflow("echo", 1) {
                             let n = self.stack.pop();
                             match n {
                                 Some(n) => {
-                                    if n > 0 && n < 128 {
+                                    if n >= 0x20 && n <= 0x7f {
                                         let c = n as u8 as char;
                                         print!("{}", c);
                                     } else {
-                                        self.msg.error("ECHO", "Arg out of range", n);
+                                        self.msg.error("EMIT", "Arg out of range", n);
                                     }
                                 }
                                 None => {}
@@ -544,8 +509,8 @@ impl ForthInterpreter {
                         println!();
                     }
                     "seeall" => {
-                        for (key, definition) in self.defined_words.iter() {
-                            self.word_see(key, definition);
+                        for (key, _definition) in self.defined_words.iter() {
+                            self.word_see(key);
                         }
                         for (key, index) in self.defined_variables.iter() {
                             self.variable_see(key, *index);
@@ -679,23 +644,38 @@ impl ForthInterpreter {
         println!("Variable {name}: {value}");
     }
 
-    fn word_see(&self, name: &str, definition: &Vec<ForthToken>) {
-        print!(": {name} ");
-        for word in definition {
-            match word {
-                ForthToken::Integer(num) => print!("{num} "),
-                ForthToken::Float(num) => print!("f{num} "),
-                ForthToken::Operator(op) => print!("{op} "),
-                ForthToken::Branch(info) => {
-                    print!("{}:{}:{} ", info.word, info.offset, info.branch_flag);
+    fn word_see(&self, name: &str) {
+        // if it's a word:
+        match self.defined_words.get(name) {
+            Some(definition) => {
+                print!(": {name} ");
+                for word in definition {
+                    match word {
+                        ForthToken::Integer(num) => print!("{num} "),
+                        ForthToken::Float(num) => print!("f{num} "),
+                        ForthToken::Operator(op) => print!("{op} "),
+                        ForthToken::Branch(info) => {
+                            print!("{}:{}:{} ", info.word, info.offset, info.branch_flag);
+                        }
+                        ForthToken::Forward(info) => {
+                            print!("{}{} ", info.word, info.tail);
+                        }
+                        ForthToken::Empty => print!("ForthToken::Empty "),
+                    }
                 }
-                ForthToken::Forward(info) => {
-                    print!("{}{} ", info.word, info.tail);
+                println!(";");
+            }
+            None => {
+                // check to see if it's a built-in
+                let doc_string = self.builtin_doc.get(name);
+                match doc_string {
+                    Some(doc_string) => {
+                        println!("Builtin: {name} {doc_string}");
+                    }
+                    None => self.msg.warning("SEE", "Word not found", &name),
                 }
-                ForthToken::Empty => print!("ForthToken::Empty "),
             }
         }
-        println!(";");
     }
 
     fn get_stack(&self) -> String {

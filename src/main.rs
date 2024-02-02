@@ -2,6 +2,7 @@
 // Version 0.1
 
 mod config;
+mod doc;
 mod engine;
 mod messages;
 mod reader;
