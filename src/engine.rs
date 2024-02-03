@@ -295,7 +295,7 @@ impl ForthInterpreter {
                         self.variable_stack.push(0); // create the location for the new variable
                         self.defined_variables
                             .insert(info.tail.trim().to_owned(), index as i64);
-                        self.msg.warning(
+                        self.msg.debug(
                             "execute_token",
                             "Dealing with a variable called",
                             info.tail.clone(),

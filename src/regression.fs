@@ -9,10 +9,17 @@
 variable test-num 0 test-num !
 
 : loop-test do i .. ." , " loop ;
+: nested-loop-test 
+    do 
+        6 4 do 
+            i .. ."  inner " 
+            loop i .. ."   outer " 
+    loop ;
 
 ."         Clear has to be the first test"
 1 2 3 4 5 clear test-none
 7 0 loop-test test-none
+-4 -8 nested-loop-test test-none
 -22 33 loop-test test-none
 33 -22 loop-test test-none
 0 0 loop-test test-none
@@ -72,6 +79,11 @@ false 55 0< test-single
 4 7 7 4 swap test-dual
 5 12 5 12 over drop test-dual
 9 4 6 9 4 rot drop test-dual
+
+."        Variables"
+5 variable x 5 x ! x @ test-single
+42 variable y 40 y ! 2 y +! y @ test-single
+variable z 42 z ! z ? test-none
 
 ."        Application tests"
 1 0 fac test-single

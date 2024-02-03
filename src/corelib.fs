@@ -21,6 +21,9 @@
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )
 
+: +! ( n addr -- ) dup @ rot + swap ! ;
+: ? ( addr -- ) @ . ."  " ;
+
 ( Test Functions: place desired result on the stack, 
   then push args to the test word, then the word, then test-single.
   If the desired result is equal to the top of the stack, the test passes.
