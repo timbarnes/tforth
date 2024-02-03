@@ -295,7 +295,7 @@ impl ForthInterpreter {
                         self.variable_stack.push(0); // create the location for the new variable
                         self.defined_variables
                             .insert(info.tail.trim().to_owned(), index as i64);
-                        self.msg.warning(
+                        self.msg.debug(
                             "execute_token",
                             "Dealing with a variable called",
                             info.tail.clone(),
@@ -379,7 +379,6 @@ impl ForthInterpreter {
                             // loop is not complete, so continue
                         } else {
                             // we're finished, so pop the control values and jump over the LOOP.
-                            self.control_stack.pop();
                             self.control_stack.pop();
                             program_counter += info.offset;
                             jumped = true;
@@ -758,7 +757,11 @@ impl ForthInterpreter {
     }
 
     fn print_stack(&self) {
-        println!("{}", self.get_stack());
+        println!("Calculation Stack: {}", self.get_stack());
+    }
+
+    fn print_control_stack(&self) {
+        println!("Control     stack: {:?}", self.control_stack);
     }
 
     fn print_variables(&self) {
@@ -785,7 +788,10 @@ impl ForthInterpreter {
             }
             io::stdout().flush().unwrap();
             match self.parser.reader.read_char() {
-                Some('s') => self.print_stack(),
+                Some('s') => {
+                    self.print_stack();
+                    self.print_control_stack();
+                }
                 Some('v') => self.print_variables(),
                 Some('a') => {
                     self.print_stack();
