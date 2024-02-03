@@ -8,8 +8,15 @@
 
 variable test-num 0 test-num !
 
+: loop-test do i .. ." , " loop ;
+
 ."         Clear has to be the first test"
 1 2 3 4 5 clear test-none
+7 0 loop-test test-none
+-22 33 loop-test test-none
+33 -22 loop-test test-none
+0 0 loop-test test-none
+
 ."         Printing"
 23 . test-none
 44 .. flush test-none
