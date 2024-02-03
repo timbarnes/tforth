@@ -380,7 +380,6 @@ impl ForthInterpreter {
                         } else {
                             // we're finished, so pop the control values and jump over the LOOP.
                             self.control_stack.pop();
-                            self.control_stack.pop();
                             program_counter += info.offset;
                             jumped = true;
                         }
@@ -758,7 +757,11 @@ impl ForthInterpreter {
     }
 
     fn print_stack(&self) {
-        println!("{}", self.get_stack());
+        println!("Calculation Stack: {}", self.get_stack());
+    }
+
+    fn print_control_stack(&self) {
+        println!("Control     stack: {:?}", self.control_stack);
     }
 
     fn print_variables(&self) {
@@ -785,7 +788,10 @@ impl ForthInterpreter {
             }
             io::stdout().flush().unwrap();
             match self.parser.reader.read_char() {
-                Some('s') => self.print_stack(),
+                Some('s') => {
+                    self.print_stack();
+                    self.print_control_stack();
+                }
                 Some('v') => self.print_variables(),
                 Some('a') => {
                     self.print_stack();
