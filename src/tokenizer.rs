@@ -41,17 +41,17 @@ impl ForwardInfo {
 
 #[derive(Debug, Clone)]
 pub struct BranchInfo {
-    pub word: String,      // word name
-    pub offset: usize,     // branch distance
-    pub branch_flag: bool, // word-specific DO uses it to know if it should take bounds off the stack
+    pub word: String,     // word name
+    pub offset: usize,    // branch distance
+    pub branch_id: usize, // word-specific DO uses it to keep it's personal handle
 }
 
 impl BranchInfo {
-    pub fn new(word: String, offset: usize, flag: bool) -> BranchInfo {
+    pub fn new(word: String, offset: usize, branch_id: usize) -> BranchInfo {
         BranchInfo {
             word,
             offset,
-            branch_flag: flag,
+            branch_id,
         }
     }
 }
@@ -61,6 +61,7 @@ pub struct Tokenizer {
     line: String,
     token_string: String,
     pub reader: Reader,
+    branch_counter: usize,
     msg: Msg,
 }
 
@@ -70,6 +71,7 @@ impl Tokenizer {
             line: String::new(),
             token_string: String::new(),
             reader,
+            branch_counter: 0,
             msg: Msg::new(),
         }
     }
@@ -94,7 +96,12 @@ impl Tokenizer {
                 } else if is_float(&text) {
                     Some(ForthToken::Float(text.parse().unwrap()))
                 } else if BRANCHES.contains(&text.as_str()) {
-                    Some(ForthToken::Branch(BranchInfo::new(text, 0, true)))
+                    self.branch_counter += 1;
+                    Some(ForthToken::Branch(BranchInfo::new(
+                        text,
+                        0,
+                        self.branch_counter,
+                    )))
                 } else {
                     // it's a Forward or an Operator
                     for (word, terminator) in FORWARDS {

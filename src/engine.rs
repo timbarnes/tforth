@@ -9,12 +9,29 @@ use crate::reader::Reader;
 use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
 
 #[derive(Debug)]
+struct ControlFrame {
+    id: usize,
+    incr: i64,
+    end: i64,
+}
+
+impl ControlFrame {
+    fn new(id: usize, start: i64, end: i64) -> ControlFrame {
+        ControlFrame {
+            id,
+            incr: start,
+            end,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ForthInterpreter {
     pub stack: Vec<i64>, // the numeric stack, currently integers
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
     pub variable_stack: Vec<i64>,                        // where variables are stored
     pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
-    pub control_stack: Vec<i64>,                         // for do loops etc.
+    pub control_stack: Vec<ControlFrame>,                // for do loops etc.
     builtin_doc: HashMap<String, String>,                // doc strings for built-in words
     text: String,                                        // the current s".."" string
     file_mode: FileMode,
@@ -188,53 +205,61 @@ impl ForthInterpreter {
     fn calculate_branches(&mut self) {
         // replace words that incorporate branches with ForthToken::Branch
         // and set up offsets as required.
-        let mut branch_stack = Vec::<(&str, usize)>::new();
+        let mut branch_stack = Vec::<(&str, usize, usize)>::new();
         let mut idx = 0; // points to the current token
+        let mut branch_id: usize = 0; // for later use
         while idx < self.new_word_definition.len() {
             let cur_token = &self.new_word_definition[idx];
             if let ForthToken::Branch(branch_info) = cur_token {
                 match branch_info.word.as_str() {
                     "if" => {
                         // put the info on the stack
-                        branch_stack.push(("if", idx));
+                        branch_stack.push(("if", idx, 0));
                     }
                     "else" => {
                         // pop stack, insert new ZeroEqual Branch token with offset
-                        if let Some((_word, place)) = branch_stack.pop() {
+                        if let Some((_word, place, _id)) = branch_stack.pop() {
                             self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
                                 "if".to_string(),
                                 idx - place,
-                                true,
+                                0,
                             ));
                         }
-                        branch_stack.push(("else", idx));
+                        branch_stack.push(("else", idx, 0));
                     }
                     "then" => {
                         // pop stack, insert new Unconditional Branch token with offset
-                        if let Some((word, place)) = branch_stack.pop() {
+                        if let Some((word, place, _id)) = branch_stack.pop() {
                             self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
                                 word.to_string(),
                                 idx - place,
-                                true,
+                                0, // IF statements don't need a branch_id
                             ));
                         }
                     }
                     "do" => {
+                        branch_id = branch_info.branch_id;
                         // push onto branch_stack
-                        branch_stack.push(("do", idx));
+                        branch_stack.push(("do", idx, branch_info.branch_id));
                     }
                     "loop" => {
                         // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                        if let Some((word, place)) = branch_stack.pop() {
+                        if let Some((word, place, id)) = branch_stack.pop() {
+                            // build the offset into the DO token
                             self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                word.to_string(),
+                                word.to_owned(),
                                 idx - place,
-                                true,
+                                id, // it's the first time through the loop
                             ));
-                            // need to put in a value for move direction
+                            // build the offset into the LOOP token
+                            self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
+                                "loop".to_owned(),
+                                idx - place + 1,
+                                id, // not used
+                            ));
                         }
                     }
-                    _ => (),
+                    _ => {}
                 }
             }
             idx += 1;
@@ -284,15 +309,6 @@ impl ForthInterpreter {
                     _ => (),
                 }
             }
-            /*             ForthToken::Text(txt) | ForthToken::Comment(txt) => {
-                           self.msg_handler.error(
-                               "execute_token",
-                               "Should not have Text or Comment tokens",
-                               txt.as_str(),
-                           );
-                           self.abort_flag = true;
-                       }
-            */
             ForthToken::Branch(info) => {
                 match info.word.as_str() {
                     // runtime semantics
@@ -320,12 +336,58 @@ impl ForthInterpreter {
                     }
                     "do" => {
                         // ( limit first -- )
-                        // first time, (branch_flag == true) grab limit and first values and put them on the control stack
+                        // first time, (branch_id is not top of control stack) grab limit and first values
+                        // and put them on the control stack
                         // if limit == current, jump over LOOP, otherwise increment current,
-                        // set branch_flag false, and continue
+                        // continue
+                        if self.control_stack.is_empty()
+                            || self.control_stack[self.control_stack.len() - 1].id != info.branch_id
+                        {
+                            // it's our first time
+                            // place popped values on the control stack
+                            if let (Some(init), Some(end)) = (self.stack.pop(), self.stack.pop()) {
+                                self.control_stack.push(ControlFrame::new(
+                                    info.branch_id,
+                                    init,
+                                    end,
+                                ));
+                                // Rebuild the token
+                                /* let new_token = ForthToken::Branch(BranchInfo::new(
+                                    "do".to_owned(),
+                                    info.offset,
+                                    info.branch_id,
+                                )); */
+                            } else {
+                                self.msg.error(
+                                    "do",
+                                    "DO requires END and INIT values on stack",
+                                    "",
+                                );
+                                self.abort_flag = true;
+                                return (program_counter, jumped);
+                            }
+                        }
+                        // process the loop variables
+                        let control_stack_last = self.control_stack.len() - 1;
+                        let start = self.control_stack[control_stack_last].incr;
+                        let end = self.control_stack[control_stack_last].end;
+                        if start < end {
+                            self.control_stack[control_stack_last].incr += 1;
+                            jumped = false;
+                            // TBD builtin "i" word puts "init" value on calculation stack
+                            // TBD builtin "j" word puts outer loop "init" value on calculation stack
+                            // loop is not complete, so continue
+                        } else {
+                            // we're finished, so pop the control values and jump over the LOOP.
+                            self.control_stack.pop();
+                            self.control_stack.pop();
+                            program_counter += info.offset;
+                            jumped = true;
+                        }
                     }
                     "loop" => {
-                        // unconditionally jump back to the matching loop
+                        program_counter -= info.offset;
+                        jumped = true;
                     }
                     _ => (),
                 }
@@ -361,7 +423,7 @@ impl ForthInterpreter {
                     "/" => pop2_push1!("/", |a, b| a / b),
                     "mod" => pop2_push1!("mod", |a, b| a % b),
                     "<" => pop2_push1!("<", |a, b| if a < b { -1 } else { 0 }),
-                    "." => pop1!(".", |a| print!("{a}")),
+                    "." => pop1!(".", |a| println!("{a}")),
                     ".." => pop1!("..", |a| print!("{a}")),
                     "true" => self.stack.push(-1),
                     "false" => self.stack.push(0),
@@ -380,7 +442,7 @@ impl ForthInterpreter {
                     }
                     ".s\"" => {
                         // print the saved string
-                        println!("{:?}", self.text);
+                        print!("{:?}", self.text);
                     }
                     "emit" => {
                         if !self.stack_underflow("echo", 1) {
@@ -490,6 +552,19 @@ impl ForthInterpreter {
                                     self.variable_stack[address] = val;
                                 }
                             }
+                        }
+                    }
+                    "i" => {
+                        // print the index of the current top-level loop
+                        if self.control_stack.is_empty() {
+                            self.msg.warning(
+                                "I",
+                                "Can only be used inside a DO .. LOOP structure",
+                                "",
+                            );
+                        } else {
+                            self.stack
+                                .push(self.control_stack[self.control_stack.len() - 1].incr - 1);
                         }
                     }
                     "abort" => {
@@ -651,7 +726,7 @@ impl ForthInterpreter {
                         ForthToken::Float(num) => print!("f{num} "),
                         ForthToken::Operator(op) => print!("{op} "),
                         ForthToken::Branch(info) => {
-                            print!("{}:{}:{} ", info.word, info.offset, info.branch_flag);
+                            print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
                         }
                         ForthToken::Forward(info) => {
                             print!("{}{} ", info.word, info.tail);
@@ -701,7 +776,7 @@ impl ForthInterpreter {
                 ForthToken::Float(num) => print!("f{num}: Step> "),
                 ForthToken::Operator(op) => print!("{op}: Step> "),
                 ForthToken::Branch(info) => {
-                    print!("{}:{}:{}: Step> ", info.word, info.offset, info.branch_flag);
+                    print!("{}:{}:{}: Step> ", info.word, info.offset, info.branch_id);
                 }
                 ForthToken::Forward(info) => {
                     print!("{}{}: Step> ", info.word, info.tail);
