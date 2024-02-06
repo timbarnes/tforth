@@ -29,7 +29,7 @@
 
 
 ( Application functions )
-: fac ( n -- n! ) 
+: fac ( n -- n! )   \ Calculates factorial of a non-negative integer. No checks for stack or calculation overflow.
     dup 
         if 
             1 swap _fac 
@@ -37,7 +37,7 @@
             drop 1 
         then ;
 
-: _fac ( r n -- r ) 
+: _fac ( r n -- r )   \ Helper function that does most of the work.
     dup if 
         tuck * swap 1 - _fac 
     else 

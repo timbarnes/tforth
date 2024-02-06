@@ -322,6 +322,9 @@ impl ForthInterpreter {
                         // a builtin's documentation string
                         self.word_see(info.tail.trim());
                     }
+                    "\\" => {
+                        // comment: no execution action
+                    }
                     _ => (),
                 }
             }

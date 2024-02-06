@@ -9,12 +9,13 @@ use crate::reader::Reader;
 const BRANCHES: [&str; 9] = [
     "if", "else", "then", "begin", "do", "loop", "until", "repeat", "+loop",
 ];
-const FORWARDS: [(&str, &str); 5] = [
-    ("(", ")"),
-    ("s\"", "\""),
-    (".\"", "\""),
-    ("see", " \t\n"),
-    ("variable", " \t\n"),
+const FORWARDS: [(&str, &str); 6] = [
+    ("(", ")"),            // comment
+    ("s\"", "\""),         // stored string
+    (".\"", "\""),         // inline string print
+    ("see", " \t\n"),      // view word definition
+    ("variable", " \t\n"), // variable declaration
+    ("\\", "\n"),          // comment to end of line
 ];
 
 #[derive(Debug, Clone)]
