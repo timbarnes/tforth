@@ -31,6 +31,7 @@ pub struct ForthInterpreter {
     pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
     pub variable_stack: Vec<i64>,                        // where variables are stored
     pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
+    pub defined_constants: HashMap<String, i64>,         // separate hashmap for constants
     control_stack: Vec<ControlFrame>,                    // for do loops etc.
     builtin_doc: HashMap<String, String>,                // doc strings for built-in words
     text: String,                                        // the current s".."" string
@@ -66,7 +67,9 @@ impl ForthInterpreter {
                 defined_words: HashMap::new(),
                 text: String::new(),
                 variable_stack: Vec::new(),
+                // constant_stack: Vec::new(),
                 defined_variables: HashMap::new(),
+                defined_constants: HashMap::new(),
                 control_stack: Vec::new(),
                 builtin_doc: doc_strings,
                 file_mode: FileMode::Unset,
@@ -316,6 +319,21 @@ impl ForthInterpreter {
                             "Dealing with a variable called",
                             info.tail.clone(),
                         );
+                    }
+                    "constant" => {
+                        // Create the element and store its value from the stack
+                        if let Some(constant_value) = self.stack.pop() {
+                            self.defined_constants
+                                .insert(info.tail.trim().to_owned(), constant_value);
+                            self.msg.debug(
+                                "execute_token",
+                                "Dealing with a constant called",
+                                info.tail.clone(),
+                            );
+                        } else {
+                            self.msg
+                                .error("constant", "Stack underflow.", "Constant needs value");
+                        }
                     }
                     "see" => {
                         // ( "word name" -- ) print a word's definition or
@@ -690,6 +708,9 @@ impl ForthInterpreter {
                 } else if self.defined_variables.contains_key(word_name) {
                     //  check for a variable
                     self.stack.push(self.defined_variables[word_name]); // push the index on the stack
+                } else if self.defined_constants.contains_key(word_name) {
+                    //  check for a variable
+                    self.stack.push(self.defined_constants[word_name]); // push the index on the stack
                 } else {
                     self.msg
                         .error("execute_definition", "Undefined word", word_name);

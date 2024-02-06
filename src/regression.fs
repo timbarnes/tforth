@@ -110,10 +110,13 @@ false 55 0< test-single
 42 variable y 40 y ! 2 y +! y @ test-single
 42 variable z 42 z ! z ? z @ test-single
 
+."        Constants"
+12 12 constant months months \ a constant with the value 12
+
 ."        Application tests"
 1 0 fac test-single
 1 1 fac test-single
 6 3 fac test-single
-479001600 12 fac test-single
+479001600 12 fac test-single 
 
-test-results
+test-results  \ Checks to see if all tests passed. Errors, if any, are left on the stack.
