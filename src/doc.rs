@@ -89,12 +89,23 @@ pub fn build_doc_strings() -> HashMap<String, String> {
          Subsequent use of <name> places its address on the stack."
     );
     doc!(
+        "constant",
+        "usage: constant <name> ( v -- ) - creates a new constant called <name>, 
+         taking its value from the stack. 
+         Use of the name places the value (not the address) on the stack. "
+    );
+    doc!(
         "@",
         "( addr -- value ) Replaces the address of a variable with its value"
     );
     doc!(
         "!",
         "( value address -- ) Stores value in the variable at address"
+    );
+    doc!(
+        "\\",
+        "Defines an in-line comment. All text from the \\ to the end of line 
+        will be ignored."
     );
     doc!("abort", "Ends the execution of the current word");
     doc!(
