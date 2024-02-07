@@ -208,75 +208,141 @@ impl ForthInterpreter {
     fn calculate_branches(&mut self) {
         // replace words that incorporate branches with ForthToken::Branch
         // and set up offsets as required.
-        let mut branch_stack = Vec::<(&str, usize, usize)>::new();
+        let mut loop_stack = Vec::<(&str, usize, usize)>::new();
+        let mut conditional_stack = Vec::<(&str, usize, usize)>::new();
         let mut idx = 0; // points to the current token
         while idx < self.new_word_definition.len() {
-            let cur_token = &self.new_word_definition[idx];
+            let cur_token = self.new_word_definition[idx].clone();
             if let ForthToken::Branch(branch_info) = cur_token {
                 let word = &branch_info.word;
+
                 match word.as_str() {
                     "if" => {
                         // put the info on the stack
-                        branch_stack.push(("if", idx, 0));
+                        conditional_stack.push(("if", idx, branch_info.branch_id));
                     }
                     "else" => {
                         // pop stack, insert new ZeroEqual Branch token with offset
-                        if let Some((_word, place, _id)) = branch_stack.pop() {
+                        if let Some((_word, place, id)) = conditional_stack.pop() {
                             self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
                                 "if".to_string(),
                                 idx - place,
-                                0,
+                                id,
                             ));
+                            conditional_stack.push(("else", idx, id));
                         }
-                        branch_stack.push(("else", idx, 0));
                     }
                     "then" => {
                         // pop stack, insert new Unconditional Branch token with offset
-                        if let Some((word, place, _id)) = branch_stack.pop() {
+                        if let Some((word, place, id)) = conditional_stack.pop() {
                             self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                word.to_string(),
+                                word.to_owned(),
                                 idx - place,
-                                0, // IF statements don't need a branch_id
+                                id, // IF statements don't need a branch_id
                             ));
+                            self.new_word_definition[idx] =
+                                ForthToken::Branch(BranchInfo::new("then".to_string(), 0, id));
                         }
                     }
                     "do" => {
                         // push onto branch_stack
-                        branch_stack.push(("do", idx, branch_info.branch_id));
+                        loop_stack.push(("do", idx, branch_info.branch_id));
                     }
-                    "loop" => {
-                        // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                        if let Some((_, place, id)) = branch_stack.pop() {
-                            // build the offset into the DO token
-                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                "do".to_owned(),
-                                idx - place - 1,
-                                id, // it's the first time through the loop
-                            ));
-                            // build the offset into the LOOP token
+                    "leave" => {
+                        loop_stack.push(("leave", idx, branch_info.branch_id));
+                    }
+                    "loop" | "+loop" => {
+                        let mut branch_id = 0;
+                        // Get one record for a start
+                        if let Some((name, place, id)) = loop_stack.pop() {
+                            let loop_id = id; // capture id for consistency
+                            let mut delta: usize = 0; // capture branch-back distance from do
+                            if name == "leave" {
+                                self.new_word_definition[place] = ForthToken::Branch(
+                                    BranchInfo::new("leave".to_owned(), idx - place, loop_id),
+                                );
+                                branch_id = id; // save for the DO and LOOP records
+                            } else {
+                                // it must be a DO
+                                self.new_word_definition[place] = ForthToken::Branch(
+                                    BranchInfo::new("do".to_owned(), idx - place - 1, loop_id),
+                                );
+                                delta = place;
+                            }
+                            // if it was LEAVE, we need another record; otherwise proceed to (+)LOOP
+                            if branch_id != 0 {
+                                // get another record
+                                if let Some((_name, place, _id)) = loop_stack.pop() {
+                                    self.new_word_definition[place] = ForthToken::Branch(
+                                        BranchInfo::new("do".to_owned(), idx - place - 1, loop_id),
+                                    );
+                                }
+                            }
+                            // process the LOOP token
                             self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
-                                "loop".to_owned(),
-                                idx - place + 1,
-                                id, // not used
+                                word.clone(),
+                                idx - delta + 1,
+                                loop_id,
                             ));
                         }
-                    }
-                    "+loop" => {
-                        // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                        if let Some((_, place, id)) = branch_stack.pop() {
-                            // build the offset into the DO token
-                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                "do".to_owned(),
-                                idx - place - 1,
-                                id, // it's the first time through the loop
-                            ));
-                            // build the offset into the LOOP token
-                            self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
-                                "+loop".to_owned(),
-                                idx - place + 1,
-                                id, // not used
-                            ));
+
+                        /*
+                            // old approach
+                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
+                            if let Some((word, place, id)) = branch_stack.pop() {
+                                if word == "leave" {
+                                    self.new_word_definition[place] = ForthToken::Branch(
+                                        BranchInfo::new("leave".to_owned(), idx - place, id),
+                                    );
+                                    // we've used up the branch_stack value, so we need to get another
+                                    if let Some((_word, place, id)) = branch_stack.pop() {
+                                        self.new_word_definition[place] =
+                                            ForthToken::Branch(BranchInfo::new(
+                                                "do".to_owned(),
+                                                idx - place - 1,
+                                                id, // it's the first time through the loop
+                                            ));
+                                        self.new_word_definition[idx] =
+                                            ForthToken::Branch(BranchInfo::new(
+                                                "leave".to_owned(),
+                                                idx - place + 1,
+                                                id, // not used
+                                            ));
+                                    }
+                                } else {
+                                    self.new_word_definition[place] =
+                                        ForthToken::Branch(BranchInfo::new(
+                                            "do".to_owned(),
+                                            idx - place - 1,
+                                            id, // it's the first time through the loop
+                                        ));
+                                    self.new_word_definition[idx] =
+                                        ForthToken::Branch(BranchInfo::new(
+                                            "loop".to_owned(),
+                                            idx - place + 1,
+                                            id, // not used
+                                        ));
+                                }
+                                // build the offset into the LOOP token
+                            }
                         }
+                        "+loop" => {
+                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
+                            if let Some((_, place, id)) = branch_stack.pop() {
+                                // build the offset into the DO token
+                                // need to handle LEAVE as well...
+                                self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
+                                    "do".to_owned(),
+                                    idx - place - 1,
+                                    id, // it's the first time through the loop
+                                ));
+                                // build the offset into the LOOP token
+                                self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
+                                    "+loop".to_owned(),
+                                    idx - place + 1,
+                                    id, // not used
+                                ));
+                            } */
                     }
                     _ => {}
                 }
@@ -298,7 +364,6 @@ impl ForthInterpreter {
                 // TBD: a separate stack is used for floating point calculations
             }
             ForthToken::Forward(info) => {
-                // need a better way to capture forward and branch types' unique behaviors
                 match info.word.as_str() {
                     "(" => {} // ignore comments
                     ".\"" => {
@@ -388,7 +453,7 @@ impl ForthInterpreter {
                                 ));
                             } else {
                                 self.msg.error(
-                                    "do",
+                                    "execute_token",
                                     "DO requires END and INIT values on stack",
                                     "",
                                 );
@@ -429,6 +494,10 @@ impl ForthInterpreter {
                             self.msg.error("+loop", "No increment value on stack", "");
                             self.abort_flag = true;
                         }
+                    }
+                    "leave" => {
+                        self.control_stack.pop();
+                        program_counter += info.offset;
                     }
                     _ => (),
                 }

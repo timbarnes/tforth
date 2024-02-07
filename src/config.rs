@@ -5,7 +5,7 @@ use crate::messages::DebugLevel;
 
 use ::clap::{arg, Command};
 
-const VERSION: &str = "alpha.24.2.3";
+const VERSION: &str = "alpha.24.2.7";
 const WELCOME_MESSAGE: &str = "Welcome to tForth.";
 const EXIT_MESSAGE: &str = "Finished";
 const DEFAULT_CORE: [&str; 2] = ["~/.tforth/corelib.fs", "src/corelib.fs"];
@@ -130,7 +130,7 @@ impl Config {
             // Process one word (in immediate mode), or one definition (compile mode).
             if forth.process_token() {
                 forth.msg.info("main", "   Stack", &forth.stack);
-                forth.msg.debug("main", "   Words", &forth.defined_words);
+                // forth.msg.debug("main", "   Words", &forth.defined_words);
             } else {
                 // Exit if EOF.
                 println!("End of File. Thank you for using tForth!");

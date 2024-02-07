@@ -38,6 +38,17 @@ variable test-num 0 test-num !
 
 : loop+test do i dup dup . +loop ;
 
+: leave-test 
+    do 
+        i dup 
+        if 
+            ." inner" 
+        else 
+            ." leaving" leave 
+        then 
+            i . 
+    loop ;
+
 ."         Clear has to be the first test"
 1 2 3 4 5 clear test-none
 
@@ -64,6 +75,8 @@ variable test-num 0 test-num !
 3 15 7 3 loop-test + + test-dual
 0 0 0 loop-test test-single
 1 64 10 1 loop+test * * test-dual
+-1 0 5 -1 leave-test test-dual
+
 
 ."         Arithmetic"
 5 1 4 + test-single
@@ -111,7 +124,7 @@ false 55 0< test-single
 42 variable z 42 z ! z ? z @ test-single
 
 ."        Constants"
-12 12 constant months months \ a constant with the value 12
+12 12 constant months months test-single \ a constant with the value 12
 
 ."        Application tests"
 1 0 fac test-single

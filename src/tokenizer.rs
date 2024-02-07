@@ -6,8 +6,8 @@ use crate::messages::Msg;
 use crate::reader::Reader;
 //use crate::utility;
 
-const BRANCHES: [&str; 9] = [
-    "if", "else", "then", "begin", "do", "loop", "until", "repeat", "+loop",
+const BRANCHES: [&str; 10] = [
+    "if", "else", "then", "begin", "do", "loop", "leave", "until", "repeat", "+loop",
 ];
 const FORWARDS: [(&str, &str); 7] = [
     ("(", ")"),            // comment
