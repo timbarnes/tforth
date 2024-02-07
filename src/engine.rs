@@ -174,8 +174,8 @@ impl ForthInterpreter {
     }
 
     fn compile_token(&mut self) {
-        // We're in compile mode: compile the new word
-        let tok = &self.token;
+        // We're in compile mode: creating a new definition
+        let tok = &self.token; // the word being compiled
         match tok {
             ForthToken::Operator(tstring) => {
                 if tstring == ";" {
@@ -285,64 +285,6 @@ impl ForthInterpreter {
                                 loop_id,
                             ));
                         }
-
-                        /*
-                            // old approach
-                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                            if let Some((word, place, id)) = branch_stack.pop() {
-                                if word == "leave" {
-                                    self.new_word_definition[place] = ForthToken::Branch(
-                                        BranchInfo::new("leave".to_owned(), idx - place, id),
-                                    );
-                                    // we've used up the branch_stack value, so we need to get another
-                                    if let Some((_word, place, id)) = branch_stack.pop() {
-                                        self.new_word_definition[place] =
-                                            ForthToken::Branch(BranchInfo::new(
-                                                "do".to_owned(),
-                                                idx - place - 1,
-                                                id, // it's the first time through the loop
-                                            ));
-                                        self.new_word_definition[idx] =
-                                            ForthToken::Branch(BranchInfo::new(
-                                                "leave".to_owned(),
-                                                idx - place + 1,
-                                                id, // not used
-                                            ));
-                                    }
-                                } else {
-                                    self.new_word_definition[place] =
-                                        ForthToken::Branch(BranchInfo::new(
-                                            "do".to_owned(),
-                                            idx - place - 1,
-                                            id, // it's the first time through the loop
-                                        ));
-                                    self.new_word_definition[idx] =
-                                        ForthToken::Branch(BranchInfo::new(
-                                            "loop".to_owned(),
-                                            idx - place + 1,
-                                            id, // not used
-                                        ));
-                                }
-                                // build the offset into the LOOP token
-                            }
-                        }
-                        "+loop" => {
-                            // pop branch_stack, and set delta into loop as a negative distance, to jump back
-                            if let Some((_, place, id)) = branch_stack.pop() {
-                                // build the offset into the DO token
-                                // need to handle LEAVE as well...
-                                self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                    "do".to_owned(),
-                                    idx - place - 1,
-                                    id, // it's the first time through the loop
-                                ));
-                                // build the offset into the LOOP token
-                                self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
-                                    "+loop".to_owned(),
-                                    idx - place + 1,
-                                    id, // not used
-                                ));
-                            } */
                     }
                     _ => {}
                 }

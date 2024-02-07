@@ -7,7 +7,7 @@
 : 2dup ( a b -- a b a b ) over over ;
 : ?dup dup 0= if dup else then ;
 : > < if false else true then ;
-: <> (n -- n ) = 0= ;
+: <> ( n -- n ) = 0= ;
 : min ( m n -- m | n ) 2dup < if drop else nip then ;
 : max ( m n -- m | n ) 2dup > if drop else nip then ;
 : abs (n -- n | -n ) dup 0 < if -1 * then ;
