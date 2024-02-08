@@ -54,7 +54,11 @@ impl Reader {
                         msg: msg_handler,
                     }),
                     Err(_) => {
-                        msg_handler.error("Reader::new", "File not able to be opened", file_path);
+                        msg_handler.error(
+                            "Reader::new",
+                            "File not able to be opened",
+                            Some(file_path),
+                        );
                         None
                     }
                 }
@@ -79,19 +83,21 @@ impl Reader {
                 // Read from Stdin
                 match io::stdin().read_line(&mut new_line) {
                     Ok(_) => {
-                        self.msg.debug("get_line", "Got some values", &new_line);
+                        self.msg
+                            .debug("get_line", "Got some values", Some(&new_line));
                         Some(new_line)
                     }
                     Err(error) => {
                         self.msg
-                            .error("get_line", "read_line error", error.to_string());
+                            .error("get_line", "read_line error", Some(error.to_string()));
                         None
                     }
                 }
             }
             Source::Stream(ref mut file) => {
                 // Read from a file. TokenSource is a BufReader. No prompts
-                self.msg.debug("get_line", "Reading from file", "");
+                self.msg
+                    .debug("get_line", "Reading from file", None::<bool>);
                 let chars_read = &file.read_line(&mut new_line);
                 match chars_read {
                     Ok(chars) => {

@@ -180,7 +180,7 @@ impl Tokenizer {
                     self.msg.debug(
                         "get_token_text",
                         "read a line of length",
-                        format!("{:?}", self.line.len()),
+                        Some(format!("{:?}", self.line.len())),
                     );
                 }
                 None => {
@@ -202,12 +202,13 @@ impl Tokenizer {
         }
         if chars_used == 0 {
             self.msg
-                .debug("get_token_text", "end of line", &token_string);
+                .debug("get_token_text", "end of line", Some(&token_string));
             self.line.clear();
             self.get_token_text(current_stack) // go again
         } else {
             self.line = self.line[chars_used..].to_string();
-            self.msg.debug("get_token_text", "returning", &token_string);
+            self.msg
+                .debug("get_token_text", "returning", Some(&token_string));
             Some(token_string)
         }
     }

@@ -90,21 +90,23 @@ impl Config {
                     self.loaded_core = true;
                     forth
                         .msg
-                        .info("MAIN", "Loaded core dictionary", &self.core_file);
+                        .info("MAIN", "Loaded core dictionary", Some(&self.core_file));
                     break;
                 }
             }
             if !self.loaded_core {
-                forth
-                    .msg
-                    .error("MAIN", "Unable to load core dictionary", &self.core_file);
+                forth.msg.error(
+                    "MAIN",
+                    "Unable to load core dictionary",
+                    Some(&self.core_file),
+                );
             }
         }
         if self.loaded_file != "" {
             if !forth.load_file(&self.loaded_file) {
                 forth
                     .msg
-                    .error("MAIN", "Unable to load userfile", &self.loaded_file);
+                    .error("MAIN", "Unable to load userfile", Some(&self.loaded_file));
             }
         }
 
@@ -129,7 +131,7 @@ impl Config {
 
             // Process one word (in immediate mode), or one definition (compile mode).
             if forth.process_token() {
-                forth.msg.info("main", "   Stack", &forth.stack);
+                forth.msg.info("main", "   Stack", Some(&forth.stack));
                 // forth.msg.debug("main", "   Words", &forth.defined_words);
             } else {
                 // Exit if EOF.

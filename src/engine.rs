@@ -113,7 +113,7 @@ impl ForthInterpreter {
 
     fn stack_underflow(&self, op: &str, n: usize) -> bool {
         if self.stack.len() < n {
-            self.msg.error(op, "Stack underflow", "");
+            self.msg.error(op, "Stack underflow", None::<bool>);
             true
         } else {
             false
@@ -125,7 +125,7 @@ impl ForthInterpreter {
         match val {
             Some(value) => Some(value),
             None => {
-                self.msg.error(word, "Stack underflow", "");
+                self.msg.error(word, "Stack underflow", None::<bool>);
                 None
             }
         }
@@ -139,7 +139,7 @@ impl ForthInterpreter {
                 None => None,
             },
             None => {
-                self.msg.error(word, "Stack underflow", "");
+                self.msg.error(word, "Stack underflow", None::<bool>);
                 None
             }
         }
@@ -149,7 +149,8 @@ impl ForthInterpreter {
         let new_token = self.parser.get_token(&self.get_stack()); // Prompt if necessary, return a token
         match new_token {
             Some(new_token) => {
-                self.msg.debug("execute_token", "operator is", &self.token);
+                self.msg
+                    .debug("execute_token", "operator is", Some(&self.token));
                 self.token = new_token;
                 match self.token {
                     ForthToken::Empty => {
@@ -191,10 +192,11 @@ impl ForthInterpreter {
                     self.new_word_name = tstring.to_string();
                 } else if tstring == ":" {
                     self.msg
-                        .warning("compile_token", "Illegal inside definition", ":");
+                        .warning("compile_token", "Illegal inside definition", Some(":"));
                 } else {
                     // push the new token onto the definition
-                    self.msg.debug("compile_token", "Pushing", &self.token);
+                    self.msg
+                        .debug("compile_token", "Pushing", Some(&self.token));
                     self.new_word_definition.push(self.token.clone());
                 }
             }
@@ -324,7 +326,7 @@ impl ForthInterpreter {
                         self.msg.debug(
                             "execute_token",
                             "Dealing with a variable called",
-                            info.tail.clone(),
+                            Some(&info.tail),
                         );
                     }
                     "constant" => {
@@ -335,11 +337,14 @@ impl ForthInterpreter {
                             self.msg.debug(
                                 "execute_token",
                                 "Dealing with a constant called",
-                                info.tail.clone(),
+                                Some(&info.tail),
                             );
                         } else {
-                            self.msg
-                                .error("constant", "Stack underflow.", "Constant needs value");
+                            self.msg.error(
+                                "constant",
+                                "Stack underflow.",
+                                Some("Constant needs value"),
+                            );
                         }
                     }
                     "see" => {
@@ -397,7 +402,7 @@ impl ForthInterpreter {
                                 self.msg.error(
                                     "execute_token",
                                     "DO requires END and INIT values on stack",
-                                    "",
+                                    None::<bool>,
                                 );
                                 self.abort_flag = true;
                                 return (program_counter, jumped);
@@ -433,7 +438,8 @@ impl ForthInterpreter {
                                 self.control_stack.pop();
                             }
                         } else {
-                            self.msg.error("+loop", "No increment value on stack", "");
+                            self.msg
+                                .error("+loop", "No increment value on stack", None::<bool>);
                             self.abort_flag = true;
                         }
                     }
@@ -504,7 +510,7 @@ impl ForthInterpreter {
                                     let c = n as u8 as char;
                                     print!("{}", c);
                                 } else {
-                                    self.msg.error("EMIT", "Arg out of range", n);
+                                    self.msg.error("EMIT", "Arg out of range", Some(n));
                                 }
                             }
                         }
@@ -520,16 +526,11 @@ impl ForthInterpreter {
                         if let Some(top) = self.stack.last() {
                             self.stack.push(*top);
                         } else {
-                            self.msg.warning("DUP", "Error - DUP: Stack is empty.", "");
+                            self.msg
+                                .warning("DUP", "Error - DUP: Stack is empty.", None::<bool>);
                         }
                     }
-                    "drop" => {
-                        if !self.stack.is_empty() {
-                            self.stack.pop();
-                        } else {
-                            self.msg.warning("DROP", "Stack is empty.", "");
-                        }
-                    }
+                    "drop" => pop1!("drop", |_a| ()),
                     "swap" => {
                         if self.stack.len() > 1 {
                             let a = self.stack[self.stack.len() - 1];
@@ -539,7 +540,8 @@ impl ForthInterpreter {
                             self.stack.push(a);
                             self.stack.push(b);
                         } else {
-                            self.msg.warning("SWAP", "Too few elements on stack.", "");
+                            self.msg
+                                .warning("SWAP", "Too few elements on stack.", None::<bool>);
                         }
                     }
                     "over" => {
@@ -591,7 +593,7 @@ impl ForthInterpreter {
                                 if address < self.variable_stack.len() {
                                     self.stack.push(self.variable_stack[address]);
                                 } else {
-                                    self.msg.error("@", "Bad variable address", adr);
+                                    self.msg.error("@", "Bad variable address", Some(adr));
                                 }
                             }
                         }
@@ -612,7 +614,7 @@ impl ForthInterpreter {
                             self.msg.warning(
                                 "I",
                                 "Can only be used inside a DO .. LOOP structure",
-                                "",
+                                None::<bool>,
                             );
                         } else {
                             self.stack
@@ -625,7 +627,7 @@ impl ForthInterpreter {
                             self.msg.warning(
                                 "I",
                                 "Can only be used inside a nested DO .. LOOP structure",
-                                "",
+                                None::<bool>,
                             );
                         } else {
                             self.stack
@@ -634,7 +636,8 @@ impl ForthInterpreter {
                     }
                     "abort" => {
                         // empty the stack, reset any pending operations, and return to the prompt
-                        self.msg.warning("ABORT", "Terminating execution", "");
+                        self.msg
+                            .warning("ABORT", "Terminating execution", None::<bool>);
                         self.stack.clear();
                         self.parser.clear();
                         self.abort_flag = true;
@@ -724,12 +727,13 @@ impl ForthInterpreter {
                     self.stack.push(self.defined_constants[word_name]); // push the index on the stack
                 } else {
                     self.msg
-                        .error("execute_definition", "Undefined word", word_name);
+                        .error("execute_definition", "Undefined word", Some(word_name));
                     return;
                 }
             }
             _ => {
-                self.msg.error("execute_definition", "Definition error", "");
+                self.msg
+                    .error("execute_definition", "Definition error", None::<bool>);
             }
         }
     }
@@ -749,9 +753,10 @@ impl ForthInterpreter {
                         std::mem::swap(&mut previous_reader, &mut self.parser.reader);
                         loop {
                             if self.process_token() {
-                                self.msg.debug("loaded", "processed", &self.token);
+                                self.msg.debug("loaded", "processed", Some(&self.token));
                             } else {
-                                self.msg.debug("loaded", "No more tokens to read", "");
+                                self.msg
+                                    .debug("loaded", "No more tokens to read", None::<bool>);
                                 break;
                             }
                         }
@@ -760,13 +765,15 @@ impl ForthInterpreter {
                     }
                     None => {
                         self.abort_flag = true;
-                        self.msg.error("loaded", "Failed to create new reader", "");
+                        self.msg
+                            .error("loaded", "Failed to create new reader", None::<bool>);
                         false
                     }
                 }
             }
             Err(error) => {
-                self.msg.warning("loaded", error.to_string().as_str(), "");
+                self.msg
+                    .warning("loaded", error.to_string().as_str(), None::<bool>);
                 self.abort_flag = true;
                 false
             }
@@ -813,7 +820,7 @@ impl ForthInterpreter {
                     Some(doc_string) => {
                         println!("Builtin: {name} {doc_string}");
                     }
-                    None => self.msg.warning("SEE", "Word not found", name),
+                    None => self.msg.warning("SEE", "Word not found", Some(name)),
                 }
             }
         }
