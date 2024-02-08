@@ -44,9 +44,9 @@ impl Config {
                     .required(false)
                     .value_parser(["error", "warning", "info", "debug"]),
             )
-            .arg(arg!(--library <VALUE>).required(false))
-            .arg(arg!(--file <VALUE>).required(false))
-            .arg(arg!(--nocore).required(false))
+            .arg(arg!(-l --library <VALUE>).required(false))
+            .arg(arg!(-f --file <VALUE>).required(false))
+            .arg(arg!(-n - -nocore).required(false))
             .get_matches();
 
         let debuglevel = arguments.get_one::<String>("debuglevel");
