@@ -481,8 +481,7 @@ impl ForthInterpreter {
                     "/" => pop2_push1!("/", |a, b| a / b),
                     "mod" => pop2_push1!("mod", |a, b| a % b),
                     "<" => pop2_push1!("<", |a, b| if a < b { -1 } else { 0 }),
-                    "." => pop1!(".", |a| println!("{a}")),
-                    ".." => pop1!("..", |a| print!("{a}")),
+                    "." => pop1!(".", |a| print!("{a} ")),
                     "true" => self.stack.push(-1),
                     "false" => self.stack.push(0),
                     "=" => pop2_push1!("=", |a, b| if a == b { -1 } else { 0 }),
@@ -492,6 +491,7 @@ impl ForthInterpreter {
                         // print stack contents
                         println!("{:?}", self.stack);
                     }
+                    "cr" => println!(""),
                     "show-stack" => {
                         self.show_stack = true;
                     }

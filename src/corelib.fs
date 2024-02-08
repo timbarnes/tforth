@@ -17,13 +17,12 @@
 : dbg-quiet 0 dbg ;
 : debug show-stack step-on ;
 : bl 32 ; ( puts the character code for a space on the stack )
-: cr 10 ; ( puts the character code for a carriage return on the stack )
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )
 
 : +! ( n addr -- ) dup @ rot + swap ! ;
-: ? ( addr -- ) @ . ."  " ;
+: ? ( addr -- ) @ . ;
 
 : run-regression clear s" src/regression.fs" loaded ;
 
