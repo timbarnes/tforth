@@ -734,7 +734,7 @@ impl ForthInterpreter {
         }
     }
 
-    pub fn load_file(&mut self, path: &str) -> bool {
+    pub fn load_file(&mut self, path: &String) -> bool {
         // read in a file of forth code using the provided path
         // returns false in case of error
         // does not modify self.text
@@ -776,7 +776,7 @@ impl ForthInterpreter {
     fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
-        self.load_file(self.text.clone().as_str());
+        self.load_file(&self.text.clone());
     }
 
     fn variable_see(&self, name: &str, index: i64) {

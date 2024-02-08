@@ -86,7 +86,7 @@ impl Config {
 
         if !self.no_core {
             for path in DEFAULT_CORE {
-                if forth.load_file(path) {
+                if forth.load_file(&path.to_owned()) {
                     self.loaded_core = true;
                     forth
                         .msg
@@ -101,7 +101,7 @@ impl Config {
             }
         }
         if self.loaded_file != "" {
-            if !forth.load_file(self.loaded_file.as_str()) {
+            if !forth.load_file(&self.loaded_file) {
                 forth
                     .msg
                     .error("MAIN", "Unable to load userfile", &self.loaded_file);
