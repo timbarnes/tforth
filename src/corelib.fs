@@ -7,7 +7,7 @@
 : 2dup ( a b -- a b a b ) over over ;
 : ?dup dup 0= if dup else then ;
 : > < if false else true then ;
-: <> (n -- n ) = 0= ;
+: <> ( n -- n ) = 0= ;
 : min ( m n -- m | n ) 2dup < if drop else nip then ;
 : max ( m n -- m | n ) 2dup > if drop else nip then ;
 : abs (n -- n | -n ) dup 0 < if -1 * then ;
@@ -17,13 +17,12 @@
 : dbg-quiet 0 dbg ;
 : debug show-stack step-on ;
 : bl 32 ; ( puts the character code for a space on the stack )
-: cr 10 ; ( puts the character code for a carriage return on the stack )
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )
 
 : +! ( n addr -- ) dup @ rot + swap ! ;
-: ? ( addr -- ) @ . ."  " ;
+: ? ( addr -- ) @ . ;
 
 : run-regression clear s" src/regression.fs" loaded ;
 

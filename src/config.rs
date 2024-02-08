@@ -44,9 +44,9 @@ impl Config {
                     .required(false)
                     .value_parser(["error", "warning", "info", "debug"]),
             )
-            .arg(arg!(--library <VALUE>).required(false))
-            .arg(arg!(--file <VALUE>).required(false))
-            .arg(arg!(--nocore).required(false))
+            .arg(arg!(-l --library <VALUE>).required(false))
+            .arg(arg!(-f --file <VALUE>).required(false))
+            .arg(arg!(-n - -nocore).required(false))
             .get_matches();
 
         let debuglevel = arguments.get_one::<String>("debuglevel");
@@ -86,25 +86,27 @@ impl Config {
 
         if !self.no_core {
             for path in DEFAULT_CORE {
-                if forth.load_file(path) {
+                if forth.load_file(&path.to_owned()) {
                     self.loaded_core = true;
                     forth
                         .msg
-                        .info("MAIN", "Loaded core dictionary", &self.core_file);
+                        .info("MAIN", "Loaded core dictionary", Some(&self.core_file));
                     break;
                 }
             }
             if !self.loaded_core {
-                forth
-                    .msg
-                    .error("MAIN", "Unable to load core dictionary", &self.core_file);
+                forth.msg.error(
+                    "MAIN",
+                    "Unable to load core dictionary",
+                    Some(&self.core_file),
+                );
             }
         }
         if self.loaded_file != "" {
-            if !forth.load_file(self.loaded_file.as_str()) {
+            if !forth.load_file(&self.loaded_file) {
                 forth
                     .msg
-                    .error("MAIN", "Unable to load userfile", &self.loaded_file);
+                    .error("MAIN", "Unable to load userfile", Some(&self.loaded_file));
             }
         }
 
@@ -129,7 +131,7 @@ impl Config {
 
             // Process one word (in immediate mode), or one definition (compile mode).
             if forth.process_token() {
-                forth.msg.info("main", "   Stack", &forth.stack);
+                forth.msg.info("main", "   Stack", Some(&forth.stack));
                 // forth.msg.debug("main", "   Words", &forth.defined_words);
             } else {
                 // Exit if EOF.

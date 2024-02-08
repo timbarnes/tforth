@@ -15,15 +15,15 @@ variable test-num 0 test-num !
 
 variable test-num 0 test-num !
 : test-none ( .. -- ) stack-depth 1 test-num +! 
-    0= if ."  Passed" else ."    Failed" test-num @ then ;
+    0= if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
 
 : test-single ( m n.. -- b ) 1 test-num +! 
-    = if ."  Passed" else ."    Failed"  test-num @ then  ;
+    = if test-num ? ."  Passed" else ."    Failed"  test-num @ then  ;
 
 : test-dual ( j k n.. -- b ) 1 test-num +!
     rot = 
     rot rot = 
-    and if ."  Passed" else ."    Failed" test-num @ then ;
+    and if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
 
 : test-results stack-depth 0= if ." All tests passed!" else ." The following tests failed: " .s clear then ;
 
@@ -31,8 +31,8 @@ variable test-num 0 test-num !
 : nested-loop-test 
     do 
         6 4 do 
-            i .. j ..
-            loop i .. 
+            i . j .
+            loop i . 
         i 
     loop ;
 
@@ -64,7 +64,7 @@ variable test-num 0 test-num !
 
 ."         Printing"
 1 1 23 . test-single
-1 1 44 .. flush test-single
+1 1 44 . flush test-single
 1 1 .s test-single
 1 1 45 emit test-single
 
