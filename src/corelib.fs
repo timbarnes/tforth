@@ -17,6 +17,8 @@
 : dbg-quiet 0 dbg ;
 : debug show-stack step-on ;
 : bl 32 ; ( puts the character code for a space on the stack )
+: space ( -- ) bl emit ;
+: spaces ( n -- ) 0 do space loop ;
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )

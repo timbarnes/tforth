@@ -659,6 +659,17 @@ impl ForthInterpreter {
                     "stack-depth" => {
                         self.stack.push(self.stack.len() as i64);
                     }
+                    "key" => {
+                        let c = self.parser.reader.read_char();
+                        match c {
+                            Some(c) => self.stack.push(c as i64),
+                            None => self.msg.error(
+                                "KEY",
+                                "unable to get char from input stream",
+                                None::<bool>,
+                            ),
+                        }
+                    }
                     "r/w" => {
                         self.file_mode = FileMode::ReadWrite;
                     }
