@@ -71,44 +71,31 @@ impl Reader {
         // In interactive (stdin) mode, blocks until the user provides a line.
         // Returns Option(line text). None indicates the read failed.
         let mut new_line = String::new();
+        let mut result: Result<usize, std::io::Error> = Ok(0);
         match self.source {
             Source::Stdin => {
-                // Issue prompt
                 if multiline {
                     print!("{}", self.cont_prompt);
                 } else {
                     print!("{} {}", current_stack, self.prompt);
                 }
                 io::stdout().flush().unwrap();
-                // Read from Stdin
-                match io::stdin().read_line(&mut new_line) {
-                    Ok(_) => {
-                        self.msg
-                            .debug("get_line", "Got some values", Some(&new_line));
-                        Some(new_line)
-                    }
-                    Err(error) => {
-                        self.msg
-                            .error("get_line", "read_line error", Some(error.to_string()));
-                        None
-                    }
+                result = io::stdin().read_line(&mut new_line);
+            }
+            Source::Stream(ref mut file) => result = file.read_line(&mut new_line),
+        }
+        match result {
+            Ok(chars) => {
+                if chars > 0 {
+                    Some(new_line)
+                } else {
+                    None
                 }
             }
-            Source::Stream(ref mut file) => {
-                // Read from a file. TokenSource is a BufReader. No prompts
+            Err(e) => {
                 self.msg
-                    .debug("get_line", "Reading from file", None::<bool>);
-                let chars_read = &file.read_line(&mut new_line);
-                match chars_read {
-                    Ok(chars) => {
-                        if *chars > 0 {
-                            Some(new_line)
-                        } else {
-                            None
-                        }
-                    }
-                    Err(_) => None,
-                }
+                    .error("get_line", "read_line error", Some(e.to_string()));
+                None
             }
         }
     }
