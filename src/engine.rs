@@ -28,13 +28,13 @@ impl ControlFrame {
 #[derive(Debug)]
 pub struct ForthInterpreter {
     pub stack: Vec<i64>, // the numeric stack, currently integers
-    pub defined_words: HashMap<String, Vec<ForthToken>>, // the dictionary: keys (words) and their definitions
-    pub variable_stack: Vec<i64>,                        // where variables are stored
-    pub defined_variables: HashMap<String, i64>,         // separate hashmap for variables
-    pub defined_constants: HashMap<String, i64>,         // separate hashmap for constants
-    control_stack: Vec<ControlFrame>,                    // for do loops etc.
-    builtin_doc: HashMap<String, String>,                // doc strings for built-in words
-    text: String,                                        // the current s".."" string
+    pub defined_words: Vec<(String, Vec<ForthToken>)>, // the dictionary: keys (words) and their definitions
+    pub variable_stack: Vec<i64>,                      // where variables are stored
+    pub defined_variables: HashMap<String, i64>,       // separate hashmap for variables
+    pub defined_constants: HashMap<String, i64>,       // separate hashmap for constants
+    control_stack: Vec<ControlFrame>,                  // for do loops etc.
+    builtin_doc: HashMap<String, String>,              // doc strings for built-in words
+    text: String,                                      // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
     abort_flag: bool,   // true if abort has been called
@@ -64,7 +64,7 @@ impl ForthInterpreter {
             let parser = Tokenizer::new(reader);
             ForthInterpreter {
                 stack: Vec::new(),
-                defined_words: HashMap::new(),
+                defined_words: Vec::new(),
                 text: String::new(),
                 variable_stack: Vec::new(),
                 // constant_stack: Vec::new(),
@@ -183,7 +183,7 @@ impl ForthInterpreter {
                     // we are at the end of the definition
                     self.calculate_branches();
                     self.defined_words
-                        .insert(self.new_word_name.clone(), self.new_word_definition.clone());
+                        .push((self.new_word_name.clone(), self.new_word_definition.clone()));
                     self.new_word_name.clear();
                     self.new_word_definition.clear();
                     self.set_compile_mode(false);
@@ -350,12 +350,16 @@ impl ForthInterpreter {
                     "see" => {
                         // ( "word name" -- ) print a word's definition or
                         // a builtin's documentation string
-                        self.word_see(info.tail.trim());
+                        let result = self.find_idx(info.tail.trim()); // gets the index of a word
+                        match result {
+                            Some(idx) => self.word_see(idx),
+                            None => {
+                                self.msg
+                                    .warning("see", "word not found", Some(info.tail.trim()))
+                            }
+                        }
                     }
-                    "\\" => {
-                        // comment: no execution action
-                    }
-                    _ => (),
+                    _ => {}
                 }
             }
             ForthToken::Branch(info) => {
@@ -649,8 +653,8 @@ impl ForthInterpreter {
                         println!();
                     }
                     "seeall" => {
-                        for (key, _definition) in self.defined_words.iter() {
-                            self.word_see(key);
+                        for i in 0..self.defined_words.len() {
+                            self.word_see(i);
                         }
                         for (key, index) in self.defined_variables.iter() {
                             self.variable_see(key, *index);
@@ -712,35 +716,39 @@ impl ForthInterpreter {
         // execute a word defined in forth
         // see if the word is in the dictionary.
         // if so, iterate over the definition, using execute_token()
-        let mut program_counter: usize = 0;
+        let mut program_counter = 0;
         let mut jumped = false;
         match &self.token {
             ForthToken::Operator(word_name) => {
-                if self.defined_words.contains_key(word_name) {
-                    let mut definition = self.defined_words[word_name.as_str()].clone();
-                    while program_counter < definition.len() {
-                        if self.abort_flag {
-                            definition.clear();
-                            self.stack.clear();
-                            self.control_stack.clear();
-                            self.abort_flag = false;
-                            break;
-                        } else {
-                            self.token = definition[program_counter].clone();
-                            (program_counter, jumped) = self.execute_token(program_counter, jumped);
+                match self.find(word_name) {
+                    Some(index) => {
+                        let mut definition = self.defined_words[index].1.clone();
+                        while program_counter < definition.len() {
+                            if self.abort_flag {
+                                definition.clear();
+                                self.stack.clear();
+                                self.control_stack.clear();
+                                self.abort_flag = false;
+                                break;
+                            } else {
+                                self.token = definition[program_counter].clone();
+                                (program_counter, jumped) =
+                                    self.execute_token(program_counter, jumped);
+                            }
                         }
                     }
-                } else if self.defined_variables.contains_key(word_name) {
-                    //  check for a variable
-                    self.stack.push(self.defined_variables[word_name]); // push the index on the stack
-                } else if self.defined_constants.contains_key(word_name) {
-                    //  check for a variable
-                    self.stack.push(self.defined_constants[word_name]); // push the index on the stack
-                } else {
-                    self.msg
-                        .error("execute_definition", "Undefined word", Some(word_name));
-                    return;
-                }
+                    None => {
+                        if self.defined_variables.contains_key(word_name) {
+                            self.stack.push(self.defined_variables[word_name]); // push the index on the stack
+                        } else if self.defined_constants.contains_key(word_name) {
+                            self.stack.push(self.defined_constants[word_name]); // push the index on the stack
+                        } else {
+                            self.msg
+                                .error("execute_definition", "Undefined word", Some(word_name));
+                            return;
+                        }
+                    }
+                };
             }
             _ => {
                 self.msg
@@ -797,44 +805,52 @@ impl ForthInterpreter {
         self.load_file(&self.text.clone());
     }
 
+    fn find_idx(&self, name: &str) -> Option<usize> {
+        for i in 0..self.defined_words.len() {
+            if self.defined_words[i].0 == name {
+                return Some(i);
+            } else {
+                return None;
+            }
+        }
+        None
+    }
+
+    fn find(&self, name: &str) -> Option<usize> {
+        // find a word if it's defined; search from the newest to the oldest
+        if self.defined_words.len() > 0 {
+            for (i, (n, _)) in self.defined_words.iter().rev().enumerate() {
+                if n.as_str() == name {
+                    return Some(self.defined_words.len() - i - 1);
+                }
+            }
+        }
+        None
+    }
     fn variable_see(&self, name: &str, index: i64) {
         let idx = index.max(0) as usize;
         let value = self.variable_stack[idx];
         println!("Variable {name}: {value}");
     }
 
-    fn word_see(&self, name: &str) {
-        // if it's a word:
-        match self.defined_words.get(name) {
-            Some(definition) => {
-                print!(": {name} ");
-                for word in definition {
-                    match word {
-                        ForthToken::Integer(num) => print!("{num} "),
-                        ForthToken::Float(num) => print!("f{num} "),
-                        ForthToken::Operator(op) => print!("{op} "),
-                        ForthToken::Branch(info) => {
-                            print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
-                        }
-                        ForthToken::Forward(info) => {
-                            print!("{}{} ", info.word, info.tail);
-                        }
-                        ForthToken::Empty => print!("ForthToken::Empty "),
-                    }
+    fn word_see(&self, index: usize) {
+        let (name, definition) = &self.defined_words[index];
+        print!(": {name} ");
+        for word in definition {
+            match word {
+                ForthToken::Integer(num) => print!("{num} "),
+                ForthToken::Float(num) => print!("f{num} "),
+                ForthToken::Operator(op) => print!("{op} "),
+                ForthToken::Branch(info) => {
+                    print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
                 }
-                println!(";");
-            }
-            None => {
-                // check to see if it's a built-in
-                let doc_string = self.builtin_doc.get(name);
-                match doc_string {
-                    Some(doc_string) => {
-                        println!("Builtin: {name} {doc_string}");
-                    }
-                    None => self.msg.warning("SEE", "Word not found", Some(name)),
+                ForthToken::Forward(info) => {
+                    print!("{}{} ", info.word, info.tail);
                 }
+                ForthToken::Empty => print!("ForthToken::Empty "),
             }
         }
+        println!(";");
     }
 
     fn get_stack(&self) -> String {

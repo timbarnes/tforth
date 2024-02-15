@@ -71,7 +71,7 @@ impl Reader {
         // In interactive (stdin) mode, blocks until the user provides a line.
         // Returns Option(line text). None indicates the read failed.
         let mut new_line = String::new();
-        let mut result: Result<usize, std::io::Error> = Ok(0);
+        let result;
         match self.source {
             Source::Stdin => {
                 if multiline {
