@@ -3,7 +3,8 @@
 /// Set up a table of builtin functions, with names and code
 
 #[allow(dad_code)]
-use crate::engine::TF;
+use crate::engine::{FileMode, TF};
+use crate::messages::DebugLevel;
 use crate::tokenizer::ForthToken;
 use std::io::{self, Write};
 
@@ -81,7 +82,30 @@ impl TF {
         self.add(":", TF::f_colon);
         self.add("bye", TF::f_bye);
         self.add("words", TF::f_words);
-        self.add("see", TF::f_see_word);
+        self.add("dup", TF::f_dup);
+        self.add("drop", TF::f_drop);
+        self.add("swap", TF::f_swap);
+        self.add("over", TF::f_over);
+        self.add("rot", TF::f_rot);
+        self.add("and", TF::f_and);
+        self.add("or", TF::f_or);
+        self.add("get", TF::f_over);
+        self.add("store", TF::f_store);
+        self.add("i", TF::f_i);
+        self.add("j", TF::f_j);
+        self.add("abort", TF::f_abort);
+        self.add("see-all", TF::f_see_all);
+        self.add("stack-depth", TF::f_stack_depth);
+        self.add("key", TF::f_key);
+        self.add("r/w", TF::f_r_w);
+        self.add("r/o", TF::f_r_o);
+        self.add("loaded", TF::f_loaded);
+        self.add("dbg", TF::f_dbg);
+        self.add("debuglevel", TF::f_debuglevel);
+        self.add("step-on", TF::f_step_on);
+        self.add("step-off", TF::f_step_off);
+
+        // self.add("see", TF::f_see_word);
     }
 
     fn f_plus(&mut self) {
@@ -169,7 +193,177 @@ impl TF {
         }
         println!();
     }
-    fn f_see_word(&mut self) {
+    fn f_dup(&mut self) {
+        if let Some(top) = self.stack.last() {
+            self.stack.push(*top);
+        } else {
+            self.msg
+                .warning("DUP", "Error - DUP: Stack is empty.", None::<bool>);
+        }
+    }
+    fn f_drop(&mut self) {
+        pop1!(self, "drop", |_a| ());
+    }
+    fn f_swap(&mut self) {
+        if self.stack.len() > 1 {
+            let a = self.stack[self.stack.len() - 1];
+            let b = self.stack[self.stack.len() - 2];
+            self.stack.pop();
+            self.stack.pop();
+            self.stack.push(a);
+            self.stack.push(b);
+        } else {
+            self.msg
+                .warning("SWAP", "Too few elements on stack.", None::<bool>);
+        }
+    }
+    fn f_over(&mut self) {
+        if self.stack_underflow("OVER", 2) {
+            self.abort_flag = true;
+        } else {
+            let item = self.stack.get(self.stack.len() - 2);
+            match item {
+                Some(item) => {
+                    self.stack.push(*item);
+                }
+                None => {
+                    self.abort_flag = true;
+                }
+            }
+        }
+    }
+    fn f_rot(&mut self) {
+        if self.stack_underflow("ROT", 3) {
+            self.abort_flag = true;
+        } else {
+            let top_index = self.stack.len() - 1;
+            let top = self.stack[top_index - 2];
+            let middle = self.stack[top_index];
+            let bottom = self.stack[top_index - 1];
+            self.stack[top_index - 2] = bottom;
+            self.stack[top_index - 1] = middle;
+            self.stack[top_index] = top;
+        }
+    }
+    fn f_and(&mut self) {
+        if !self.stack_underflow("AND", 2) {
+            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                self.stack.push(a & b);
+            }
+        }
+    }
+    fn f_or(&mut self) {
+        if !self.stack_underflow("OR", 2) {
+            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
+                self.stack.push(a | b);
+            }
+        }
+    }
+    fn f_get(&mut self) {
+        if !self.stack_underflow("@", 1) {
+            if let Some(adr) = self.stack.pop() {
+                let address = adr.max(0) as usize;
+                if address < self.variable_stack.len() {
+                    self.stack.push(self.variable_stack[address]);
+                } else {
+                    self.msg.error("@", "Bad variable address", Some(adr));
+                }
+            }
+        }
+    }
+    fn f_store(&mut self) {
+        if !self.stack_underflow("!", 2) {
+            if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
+                let address = addr.max(0) as usize;
+                if address < self.variable_stack.len() {
+                    self.variable_stack[address] = val;
+                }
+            }
+        }
+    }
+
+    fn f_i(&mut self) {
+        // print the index of the current top-level loop
+        if self.control_stack.is_empty() {
+            self.msg.warning(
+                "I",
+                "Can only be used inside a DO .. LOOP structure",
+                None::<bool>,
+            );
+        } else {
+            self.stack
+                .push(self.control_stack[self.control_stack.len() - 1].incr);
+        }
+    }
+    fn f_j(&mut self) {
+        // print the index of the current second-level (outer) loop
+        if self.control_stack.len() < 2 {
+            self.msg.warning(
+                "I",
+                "Can only be used inside a nested DO .. LOOP structure",
+                None::<bool>,
+            );
+        } else {
+            self.stack
+                .push(self.control_stack[self.control_stack.len() - 2].incr);
+        }
+    }
+    fn f_abort(&mut self) {
+        // empty the stack, reset any pending operations, and return to the prompt
+        self.msg
+            .warning("ABORT", "Terminating execution", None::<bool>);
+        self.stack.clear();
+        self.parser.clear();
+        self.abort_flag = true;
+    }
+    fn f_see_all(&mut self) {
+        for i in 0..self.dictionary.len() {
+            self.word_see(i);
+        }
+        for (key, index) in self.defined_variables.iter() {
+            self.variable_see(key, *index);
+        }
+    }
+    fn f_stack_depth(&mut self) {
+        self.stack.push(self.stack.len() as i64);
+    }
+    fn f_key(&mut self) {
+        let c = self.parser.reader.read_char();
+        match c {
+            Some(c) => self.stack.push(c as i64),
+            None => self
+                .msg
+                .error("KEY", "unable to get char from input stream", None::<bool>),
+        }
+    }
+    fn f_r_w(&mut self) {
+        self.file_mode = FileMode::ReadWrite;
+    }
+    fn f_r_o(&mut self) {
+        self.file_mode = FileMode::ReadOnly;
+    }
+    fn f_loaded(&mut self) {
+        self.loaded();
+    }
+    fn f_dbg(&mut self) {
+        match self.stack.pop() {
+            Some(0) => self.msg.set_level(DebugLevel::Error),
+            Some(1) => self.msg.set_level(DebugLevel::Warning),
+            Some(2) => self.msg.set_level(DebugLevel::Info),
+            _ => self.msg.set_level(DebugLevel::Debug),
+        }
+    }
+    fn f_debuglevel(&mut self) {
+        println!("DebugLevel is {:?}", self.msg.get_level());
+    }
+    fn f_step_on(&mut self) {
+        self.step_mode = true;
+    }
+    fn f_step_off(&mut self) {
+        self.step_mode = false;
+    }
+
+    /* fn f_see_word(&mut self) {
         match &self.token {
             ForthToken::Forward(forward_info) => {
                 let idx = self.find_definition(forward_info.tail.as_str());
@@ -183,176 +377,5 @@ impl TF {
             }
             _ => {}
         }
-    }
+    } */
 }
-
-/*
-"clear" => {
-    self.stack.clear();
-}
-"dup" => {
-    if let Some(top) = self.stack.last() {
-        self.stack.push(*top);
-    } else {
-        self.msg
-            .warning("DUP", "Error - DUP: Stack is empty.", None::<bool>);
-    }
-}
-"drop" => pop1!("drop", |_a| ()),
-"swap" => {
-    if self.stack.len() > 1 {
-        let a = self.stack[self.stack.len() - 1];
-        let b = self.stack[self.stack.len() - 2];
-        self.stack.pop();
-        self.stack.pop();
-        self.stack.push(a);
-        self.stack.push(b);
-    } else {
-        self.msg
-            .warning("SWAP", "Too few elements on stack.", None::<bool>);
-    }
-}
-"over" => {
-    if self.stack_underflow("OVER", 2) {
-        self.abort_flag = true;
-    } else {
-        let item = self.stack.get(self.stack.len() - 2);
-        match item {
-            Some(item) => {
-                self.stack.push(*item);
-            }
-            None => {
-                self.abort_flag = true;
-            }
-        }
-    }
-}
-"rot" => {
-    if self.stack_underflow("OVER", 3) {
-        self.abort_flag = true;
-    } else {
-        let top_index = self.stack.len() - 1;
-        let top = self.stack[top_index - 2];
-        let middle = self.stack[top_index];
-        let bottom = self.stack[top_index - 1];
-        self.stack[top_index - 2] = bottom;
-        self.stack[top_index - 1] = middle;
-        self.stack[top_index] = top;
-    }
-}
-"and" => {
-    if !self.stack_underflow("AND", 2) {
-        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-            self.stack.push(a & b);
-        }
-    }
-}
-"or" => {
-    if !self.stack_underflow("OR", 2) {
-        if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-            self.stack.push(a | b);
-        }
-    }
-}
-"@" => {
-    if !self.stack_underflow("@", 1) {
-        if let Some(adr) = self.stack.pop() {
-            let address = adr.max(0) as usize;
-            if address < self.variable_stack.len() {
-                self.stack.push(self.variable_stack[address]);
-            } else {
-                self.msg.error("@", "Bad variable address", Some(adr));
-            }
-        }
-    }
-}
-"!" => {
-    if !self.stack_underflow("!", 2) {
-        if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
-            let address = addr.max(0) as usize;
-            if address < self.variable_stack.len() {
-                self.variable_stack[address] = val;
-            }
-        }
-    }
-}
-"i" => {
-    // print the index of the current top-level loop
-    if self.control_stack.is_empty() {
-        self.msg.warning(
-            "I",
-            "Can only be used inside a DO .. LOOP structure",
-            None::<bool>,
-        );
-    } else {
-        self.stack
-            .push(self.control_stack[self.control_stack.len() - 1].incr);
-    }
-}
-"j" => {
-    // print the index of the current second-level (outer) loop
-    if self.control_stack.len() < 2 {
-        self.msg.warning(
-            "I",
-            "Can only be used inside a nested DO .. LOOP structure",
-            None::<bool>,
-        );
-    } else {
-        self.stack
-            .push(self.control_stack[self.control_stack.len() - 2].incr);
-    }
-}
-"abort" => {
-    // empty the stack, reset any pending operations, and return to the prompt
-    self.msg
-        .warning("ABORT", "Terminating execution", None::<bool>);
-    self.stack.clear();
-    self.parser.clear();
-    self.abort_flag = true;
-}
-"seeall" => {
-    for i in 0..self.dictionary.len() {
-        self.word_see(i);
-    }
-    for (key, index) in self.defined_variables.iter() {
-        self.variable_see(key, *index);
-    }
-}
-"stack-depth" => {
-    self.stack.push(self.stack.len() as i64);
-}
-"key" => {
-    let c = self.parser.reader.read_char();
-    match c {
-        Some(c) => self.stack.push(c as i64),
-        None => self.msg.error(
-            "KEY",
-            "unable to get char from input stream",
-            None::<bool>,
-        ),
-    }
-}
-"r/w" => {
-    self.file_mode = FileMode::ReadWrite;
-}
-"r/o" => {
-    self.file_mode = FileMode::ReadOnly;
-}
-"loaded" => {
-    self.loaded();
-}
-"dbg" => match self.stack.pop() {
-    Some(0) => self.msg.set_level(DebugLevel::Error),
-    Some(1) => self.msg.set_level(DebugLevel::Warning),
-    Some(2) => self.msg.set_level(DebugLevel::Info),
-    _ => self.msg.set_level(DebugLevel::Debug),
-},
-"debuglevel?" => {
-    println!("DebugLevel is {:?}", self.msg.get_level());
-}
-"step-on" => self.step_mode = true,
-"step-off" => self.step_mode = false,
-
-// Add more operators as needed
-_ => {}
- */

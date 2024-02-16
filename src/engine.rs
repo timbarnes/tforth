@@ -53,7 +53,7 @@ pub struct TF {
 }
 
 #[derive(Debug)]
-enum FileMode {
+pub enum FileMode {
     // used for file I/O
     ReadWrite,
     ReadOnly,
@@ -197,10 +197,6 @@ impl TF {
                 if tstring == ";" {
                     // we are at the end of the definition
                     self.calculate_branches();
-                    println!(
-                        "compile_token: new definition is : {} {:?} ;",
-                        &self.new_word_name, &self.new_word_definition
-                    );
                     self.dictionary.push(ForthToken::Definition(
                         self.new_word_name.clone(),
                         self.new_word_definition.clone(),
@@ -333,7 +329,6 @@ impl TF {
                     "(" => {} // ignore comments
                     ".\"" => {
                         let tail = &info.tail[1..info.tail.len() - 1];
-                        println!("{}", tail);
                     }
                     "s\"" => {
                         let txt = &info.tail;
@@ -590,9 +585,10 @@ impl TF {
     }
 
     fn find_definition(&self, name: &str) -> Option<usize> {
-        for i in 0..self.dictionary.len() {
+        for i in (0..self.dictionary.len()).rev() {
             match &self.dictionary[i] {
                 ForthToken::Definition(n, _) => {
+                    println!("{}:{}", i, n);
                     if n == name {
                         return Some(i);
                     }
