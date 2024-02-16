@@ -1,6 +1,6 @@
 // system configuration and command line processing
 
-use crate::engine::ForthInterpreter;
+use crate::engine::TF;
 use crate::messages::DebugLevel;
 
 use ::clap::{arg, Command};
@@ -80,7 +80,8 @@ impl Config {
         // create and run the interpreter
         // return when finished
 
-        let mut forth = ForthInterpreter::new("Ok ", ">  ");
+        let mut forth = TF::new("Ok ", ">  ");
+        forth.add_builtins();
 
         forth.msg.set_level(self.debug_level.clone());
 

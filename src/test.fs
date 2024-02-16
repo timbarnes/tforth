@@ -1,2 +1,2 @@
-: test ( nothing ) 22 ;
-: tes ( nothing ) 22 ;
+: test 22 ;
+: test2 22 dup + . ;

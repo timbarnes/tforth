@@ -22,11 +22,15 @@ const FORWARDS: [(&str, &str); 7] = [
 #[derive(Debug, Clone)]
 pub enum ForthToken {
     Integer(i64),         // the token is an integer, stored here
-    Operator(String),     // the token is an operator
+    Operator(String),     // the token is an operator - either definition or builtin
     Branch(BranchInfo),   // branch
     Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
-    Float(f64),           // a floating point number
-    Empty,                // the line was empty
+    Definition(String, Vec<ForthToken>),
+    Builtin(String, u8), // the u8 is a future op code for the builtin, to replace string search
+    Variable(String, i64),
+    Constant(String, i64),
+    Float(f64), // a floating point number
+    Empty,      // the line was empty
 }
 
 #[derive(Debug, Clone)]

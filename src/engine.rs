@@ -1,12 +1,15 @@
 //The tForth interpreter struct and implementation
 
+mod builtin;
+
 use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crate::doc;
-use crate::messages::{DebugLevel, Msg};
+use crate::messages::Msg;
 use crate::reader::Reader;
 use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
+use builtin::BuiltInFn;
 
 #[derive(Debug)]
 struct ControlFrame {
@@ -25,16 +28,17 @@ impl ControlFrame {
     }
 }
 
-#[derive(Debug)]
-pub struct ForthInterpreter {
-    pub stack: Vec<i64>, // the numeric stack, currently integers
-    pub defined_words: Vec<(String, Vec<ForthToken>)>, // the dictionary: keys (words) and their definitions
-    pub variable_stack: Vec<i64>,                      // where variables are stored
-    pub defined_variables: HashMap<String, i64>,       // separate hashmap for variables
-    pub defined_constants: HashMap<String, i64>,       // separate hashmap for constants
-    control_stack: Vec<ControlFrame>,                  // for do loops etc.
-    builtin_doc: HashMap<String, String>,              // doc strings for built-in words
-    text: String,                                      // the current s".."" string
+//#[derive(Debug)]
+pub struct TF {
+    pub stack: Vec<i64>,             // the numeric stack, currently integers
+    pub dictionary: Vec<ForthToken>, // the dictionary: keys (words) and their definitions
+    pub builtins: Vec<BuiltInFn>,    // the dictionary of builtins
+    pub variable_stack: Vec<i64>,    // where variables are stored
+    pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
+    pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
+    control_stack: Vec<ControlFrame>, // for do loops etc.
+    builtin_doc: HashMap<String, String>, // doc strings for built-in words
+    text: String,                    // the current s".."" string
     file_mode: FileMode,
     compile_mode: bool, // true if compiling a word
     abort_flag: bool,   // true if abort has been called
@@ -56,15 +60,16 @@ enum FileMode {
     Unset,
 }
 
-impl ForthInterpreter {
+impl TF {
     // ForthInterpreter struct implementations
-    pub fn new(main_prompt: &str, multiline_prompt: &str) -> ForthInterpreter {
+    pub fn new(main_prompt: &str, multiline_prompt: &str) -> TF {
         let doc_strings = doc::build_doc_strings();
         if let Some(reader) = Reader::new(None, main_prompt, multiline_prompt, Msg::new()) {
             let parser = Tokenizer::new(reader);
-            ForthInterpreter {
+            TF {
                 stack: Vec::new(),
-                defined_words: Vec::new(),
+                dictionary: Vec::new(),
+                builtins: Vec::new(),
                 text: String::new(),
                 variable_stack: Vec::new(),
                 // constant_stack: Vec::new(),
@@ -101,14 +106,6 @@ impl ForthInterpreter {
     pub fn should_exit(&self) -> bool {
         // Method to determine if we should exit
         self.exit_flag
-    }
-
-    pub fn get_compile_mode(&self) -> bool {
-        self.compile_mode
-    }
-
-    fn set_compile_mode(&mut self, state: bool) {
-        self.compile_mode = state;
     }
 
     fn stack_underflow(&self, op: &str, n: usize) -> bool {
@@ -152,19 +149,37 @@ impl ForthInterpreter {
                 self.msg
                     .debug("execute_token", "operator is", Some(&self.token));
                 self.token = new_token;
-                match self.token {
+                match &self.token {
                     ForthToken::Empty => {
                         return true; // An empty line
                     }
-                    _ => {
-                        // Any valid token
-                        if self.get_compile_mode() {
-                            self.compile_token();
-                        } else {
-                            // we're in immediate mode
-                            self.execute_token(0, false);
+                    ForthToken::Operator(name) => {
+                        // Figure out if it's a definition or not
+                        let idx = self.find_definition(name.as_str());
+                        match idx {
+                            Some(_idx) => {
+                                self.token = ForthToken::Definition(name.clone(), Vec::new())
+                            }
+                            None => {
+                                let idx = self.find_builtin(name);
+                                match idx {
+                                    Some(index) => {
+                                        self.token =
+                                            ForthToken::Builtin(name.to_owned(), index as u8)
+                                    }
+                                    None => {}
+                                }
+                            }
                         }
                     }
+                    _ => {}
+                }
+                // Any valid token
+                if self.compile_mode {
+                    self.compile_token();
+                } else {
+                    // we're in immediate mode
+                    self.execute_token(0, false);
                 }
                 true
             }
@@ -182,11 +197,17 @@ impl ForthInterpreter {
                 if tstring == ";" {
                     // we are at the end of the definition
                     self.calculate_branches();
-                    self.defined_words
-                        .push((self.new_word_name.clone(), self.new_word_definition.clone()));
+                    println!(
+                        "compile_token: new definition is : {} {:?} ;",
+                        &self.new_word_name, &self.new_word_definition
+                    );
+                    self.dictionary.push(ForthToken::Definition(
+                        self.new_word_name.clone(),
+                        self.new_word_definition.clone(),
+                    ));
                     self.new_word_name.clear();
                     self.new_word_definition.clear();
-                    self.set_compile_mode(false);
+                    self.compile_mode = false;
                 } else if self.new_word_name.is_empty() {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
@@ -350,7 +371,7 @@ impl ForthInterpreter {
                     "see" => {
                         // ( "word name" -- ) print a word's definition or
                         // a builtin's documentation string
-                        let result = self.find_idx(info.tail.trim()); // gets the index of a word
+                        let result = self.find_definition(info.tail.trim()); // gets the index of a word
                         match result {
                             Some(idx) => self.word_see(idx),
                             None => {
@@ -454,260 +475,18 @@ impl ForthInterpreter {
                     _ => (),
                 }
             }
-            ForthToken::Operator(op) => {
-                macro_rules! pop2_push1 {
-                    // Helper macro
-                    ($word:expr, $expression:expr) => {
-                        if let Some((j, k)) = self.pop_two(&$word) {
-                            self.stack.push($expression(k, j));
-                        }
-                    };
-                }
-                macro_rules! pop1_push1 {
-                    // Helper macro
-                    ($word:expr, $expression:expr) => {
-                        if let Some(x) = self.pop_one(&$word) {
-                            self.stack.push($expression(x));
-                        }
-                    };
-                }
-                macro_rules! pop1 {
-                    ($word:expr, $code:expr) => {
-                        if let Some(x) = self.pop_one(&$word) {
-                            $code(x);
-                        }
-                    };
-                }
-                match op.as_str() {
-                    "+" => pop2_push1!("+", |a, b| a + b),
-                    "-" => pop2_push1!("-", |a, b| a - b),
-                    "*" => pop2_push1!("*", |a, b| a * b),
-                    "/" => pop2_push1!("/", |a, b| a / b),
-                    "mod" => pop2_push1!("mod", |a, b| a % b),
-                    "<" => pop2_push1!("<", |a, b| if a < b { -1 } else { 0 }),
-                    "." => pop1!(".", |a| print!("{a} ")),
-                    "true" => self.stack.push(-1),
-                    "false" => self.stack.push(0),
-                    "=" => pop2_push1!("=", |a, b| if a == b { -1 } else { 0 }),
-                    "0=" => pop1_push1!("0=", |a| if a == 0 { -1 } else { 0 }),
-                    "0<" => pop1_push1!("0<", |a| if a < 0 { -1 } else { 0 }),
-                    ".s" => {
-                        // print stack contents
-                        println!("{:?}", self.stack);
+            ForthToken::Definition(_, _) => self.execute_definition(),
+            ForthToken::Builtin(op, _) => {
+                let index = self.find_builtin(op);
+                match index {
+                    Some(index) => {
+                        let func = &mut self.builtins[index].code;
+                        func(self);
                     }
-                    "cr" => println!(""),
-                    "show-stack" => {
-                        self.show_stack = true;
-                    }
-                    "hide-stack" => {
-                        self.show_stack = false;
-                    }
-                    ".s\"" => {
-                        // print the saved string
-                        print!("{:?}", self.text);
-                    }
-                    "emit" => {
-                        if !self.stack_underflow("echo", 1) {
-                            let n = self.stack.pop();
-                            if let Some(n) = n {
-                                if (0x20..=0x7f).contains(&n) {
-                                    let c = n as u8 as char;
-                                    print!("{}", c);
-                                } else {
-                                    self.msg.error("EMIT", "Arg out of range", Some(n));
-                                }
-                            }
-                        }
-                    }
-                    "flush" => {
-                        // flush the stdout buffer to the terminal
-                        io::stdout().flush().unwrap();
-                    }
-                    "clear" => {
-                        self.stack.clear();
-                    }
-                    "dup" => {
-                        if let Some(top) = self.stack.last() {
-                            self.stack.push(*top);
-                        } else {
-                            self.msg
-                                .warning("DUP", "Error - DUP: Stack is empty.", None::<bool>);
-                        }
-                    }
-                    "drop" => pop1!("drop", |_a| ()),
-                    "swap" => {
-                        if self.stack.len() > 1 {
-                            let a = self.stack[self.stack.len() - 1];
-                            let b = self.stack[self.stack.len() - 2];
-                            self.stack.pop();
-                            self.stack.pop();
-                            self.stack.push(a);
-                            self.stack.push(b);
-                        } else {
-                            self.msg
-                                .warning("SWAP", "Too few elements on stack.", None::<bool>);
-                        }
-                    }
-                    "over" => {
-                        if self.stack_underflow("OVER", 2) {
-                            self.abort_flag = true;
-                        } else {
-                            let item = self.stack.get(self.stack.len() - 2);
-                            match item {
-                                Some(item) => {
-                                    self.stack.push(*item);
-                                }
-                                None => {
-                                    self.abort_flag = true;
-                                }
-                            }
-                        }
-                    }
-                    "rot" => {
-                        if self.stack_underflow("OVER", 3) {
-                            self.abort_flag = true;
-                        } else {
-                            let top_index = self.stack.len() - 1;
-                            let top = self.stack[top_index - 2];
-                            let middle = self.stack[top_index];
-                            let bottom = self.stack[top_index - 1];
-                            self.stack[top_index - 2] = bottom;
-                            self.stack[top_index - 1] = middle;
-                            self.stack[top_index] = top;
-                        }
-                    }
-                    "and" => {
-                        if !self.stack_underflow("AND", 2) {
-                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                                self.stack.push(a & b);
-                            }
-                        }
-                    }
-                    "or" => {
-                        if !self.stack_underflow("OR", 2) {
-                            if let (Some(a), Some(b)) = (self.stack.pop(), self.stack.pop()) {
-                                self.stack.push(a | b);
-                            }
-                        }
-                    }
-                    "@" => {
-                        if !self.stack_underflow("@", 1) {
-                            if let Some(adr) = self.stack.pop() {
-                                let address = adr.max(0) as usize;
-                                if address < self.variable_stack.len() {
-                                    self.stack.push(self.variable_stack[address]);
-                                } else {
-                                    self.msg.error("@", "Bad variable address", Some(adr));
-                                }
-                            }
-                        }
-                    }
-                    "!" => {
-                        if !self.stack_underflow("!", 2) {
-                            if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
-                                let address = addr.max(0) as usize;
-                                if address < self.variable_stack.len() {
-                                    self.variable_stack[address] = val;
-                                }
-                            }
-                        }
-                    }
-                    "i" => {
-                        // print the index of the current top-level loop
-                        if self.control_stack.is_empty() {
-                            self.msg.warning(
-                                "I",
-                                "Can only be used inside a DO .. LOOP structure",
-                                None::<bool>,
-                            );
-                        } else {
-                            self.stack
-                                .push(self.control_stack[self.control_stack.len() - 1].incr);
-                        }
-                    }
-                    "j" => {
-                        // print the index of the current second-level (outer) loop
-                        if self.control_stack.len() < 2 {
-                            self.msg.warning(
-                                "I",
-                                "Can only be used inside a nested DO .. LOOP structure",
-                                None::<bool>,
-                            );
-                        } else {
-                            self.stack
-                                .push(self.control_stack[self.control_stack.len() - 2].incr);
-                        }
-                    }
-                    "abort" => {
-                        // empty the stack, reset any pending operations, and return to the prompt
-                        self.msg
-                            .warning("ABORT", "Terminating execution", None::<bool>);
-                        self.stack.clear();
-                        self.parser.clear();
-                        self.abort_flag = true;
-                    }
-                    "words" => {
-                        for (key, _) in self.defined_words.iter() {
-                            print!("{key} ");
-                        }
-                        println!();
-                    }
-                    "seeall" => {
-                        for i in 0..self.defined_words.len() {
-                            self.word_see(i);
-                        }
-                        for (key, index) in self.defined_variables.iter() {
-                            self.variable_see(key, *index);
-                        }
-                    }
-                    "stack-depth" => {
-                        self.stack.push(self.stack.len() as i64);
-                    }
-                    "key" => {
-                        let c = self.parser.reader.read_char();
-                        match c {
-                            Some(c) => self.stack.push(c as i64),
-                            None => self.msg.error(
-                                "KEY",
-                                "unable to get char from input stream",
-                                None::<bool>,
-                            ),
-                        }
-                    }
-                    "r/w" => {
-                        self.file_mode = FileMode::ReadWrite;
-                    }
-                    "r/o" => {
-                        self.file_mode = FileMode::ReadOnly;
-                    }
-                    "loaded" => {
-                        self.loaded();
-                    }
-                    "dbg" => match self.stack.pop() {
-                        Some(0) => self.msg.set_level(DebugLevel::Error),
-                        Some(1) => self.msg.set_level(DebugLevel::Warning),
-                        Some(2) => self.msg.set_level(DebugLevel::Info),
-                        _ => self.msg.set_level(DebugLevel::Debug),
-                    },
-                    "debuglevel?" => {
-                        println!("DebugLevel is {:?}", self.msg.get_level());
-                    }
-                    ":" => {
-                        // Enter compile mode
-                        self.set_compile_mode(true);
-                    }
-                    "step-on" => self.step_mode = true,
-                    "step-off" => self.step_mode = false,
-                    "bye" => {
-                        self.set_exit_flag();
-                    }
-                    // Add more operators as needed
-                    _ => {
-                        // It must be a defined word
-                        self.execute_definition();
-                    }
+                    None => {}
                 }
             }
+            _ => {}
         }
         (program_counter, jumped)
     }
@@ -719,22 +498,27 @@ impl ForthInterpreter {
         let mut program_counter = 0;
         let mut jumped = false;
         match &self.token {
-            ForthToken::Operator(word_name) => {
+            ForthToken::Definition(word_name, _) => {
                 match self.find(word_name) {
                     Some(index) => {
-                        let mut definition = self.defined_words[index].1.clone();
-                        while program_counter < definition.len() {
-                            if self.abort_flag {
-                                definition.clear();
-                                self.stack.clear();
-                                self.control_stack.clear();
-                                self.abort_flag = false;
-                                break;
-                            } else {
-                                self.token = definition[program_counter].clone();
-                                (program_counter, jumped) =
-                                    self.execute_token(program_counter, jumped);
+                        let definition = self.dictionary[index].clone();
+                        match definition {
+                            ForthToken::Definition(_n, code) => {
+                                while program_counter < code.len() {
+                                    if self.abort_flag {
+                                        // code.clear();
+                                        self.stack.clear();
+                                        self.control_stack.clear();
+                                        self.abort_flag = false;
+                                        break;
+                                    } else {
+                                        self.token = code[program_counter].clone();
+                                        (program_counter, jumped) =
+                                            self.execute_token(program_counter, jumped);
+                                    }
+                                }
                             }
+                            _ => {}
                         }
                     }
                     None => {
@@ -805,12 +589,24 @@ impl ForthInterpreter {
         self.load_file(&self.text.clone());
     }
 
-    fn find_idx(&self, name: &str) -> Option<usize> {
-        for i in 0..self.defined_words.len() {
-            if self.defined_words[i].0 == name {
+    fn find_definition(&self, name: &str) -> Option<usize> {
+        for i in 0..self.dictionary.len() {
+            match &self.dictionary[i] {
+                ForthToken::Definition(n, _) => {
+                    if n == name {
+                        return Some(i);
+                    }
+                }
+                _ => {} // don't care about variables and constants
+            }
+        }
+        None
+    }
+
+    fn find_builtin(&self, name: &str) -> Option<usize> {
+        for i in 0..self.builtins.len() {
+            if self.builtins[i].name == name {
                 return Some(i);
-            } else {
-                return None;
             }
         }
         None
@@ -818,15 +614,23 @@ impl ForthInterpreter {
 
     fn find(&self, name: &str) -> Option<usize> {
         // find a word if it's defined; search from the newest to the oldest
-        if self.defined_words.len() > 0 {
-            for (i, (n, _)) in self.defined_words.iter().rev().enumerate() {
-                if n.as_str() == name {
-                    return Some(self.defined_words.len() - i - 1);
+        if self.dictionary.len() > 0 {
+            for (i, token) in self.dictionary.iter().rev().enumerate() {
+                match token {
+                    ForthToken::Definition(n, _)
+                    | ForthToken::Variable(n, _)
+                    | ForthToken::Constant(n, _) => {
+                        if n.as_str() == name {
+                            return Some(self.dictionary.len() - i - 1);
+                        }
+                    }
+                    _ => {} // should only be definitions, variables and constants in the list
                 }
             }
         }
         None
     }
+
     fn variable_see(&self, name: &str, index: i64) {
         let idx = index.max(0) as usize;
         let value = self.variable_stack[idx];
@@ -834,23 +638,33 @@ impl ForthInterpreter {
     }
 
     fn word_see(&self, index: usize) {
-        let (name, definition) = &self.defined_words[index];
-        print!(": {name} ");
-        for word in definition {
-            match word {
-                ForthToken::Integer(num) => print!("{num} "),
-                ForthToken::Float(num) => print!("f{num} "),
-                ForthToken::Operator(op) => print!("{op} "),
-                ForthToken::Branch(info) => {
-                    print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
+        // soon adding variables and constants
+        let token = &self.dictionary[index];
+        match token {
+            ForthToken::Definition(name, def) => {
+                print!(": {name} ");
+                for word in def {
+                    match word {
+                        ForthToken::Integer(num) => print!("{num} "),
+                        ForthToken::Float(num) => print!("f{num} "),
+                        ForthToken::Builtin(op, code) => print!("{op}:{code} "),
+                        ForthToken::Definition(name, _def) => print!("{name} "),
+                        ForthToken::Branch(info) => {
+                            print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
+                        }
+                        ForthToken::Forward(info) => {
+                            print!("{}{} ", info.word, info.tail);
+                        }
+                        ForthToken::Empty => print!("ForthToken::Empty "),
+                        _ => {}
+                    }
                 }
-                ForthToken::Forward(info) => {
-                    print!("{}{} ", info.word, info.tail);
-                }
-                ForthToken::Empty => print!("ForthToken::Empty "),
+                println!(";");
             }
+            ForthToken::Variable(name, val) => print!("V:{name}:{val} "),
+            ForthToken::Constant(name, val) => print!("C:{name}:{val} "),
+            _ => {}
         }
-        println!(";");
     }
 
     fn get_stack(&self) -> String {
@@ -889,7 +703,10 @@ impl ForthInterpreter {
                 ForthToken::Forward(info) => {
                     print!("{}{}: Step> ", info.word, info.tail);
                 }
+                ForthToken::Builtin(name, code) => print!("{}:{:?}", name, code),
+                ForthToken::Definition(name, _def) => print!("{name} "),
                 ForthToken::Empty => print!("ForthToken::Empty: Step> "),
+                _ => print!("variable or constant???"),
             }
             io::stdout().flush().unwrap();
             match self.parser.reader.read_char() {
