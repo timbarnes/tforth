@@ -55,7 +55,7 @@ impl Config {
                 "debug" => self.debug_level = DebugLevel::Debug,
                 "info" => self.debug_level = DebugLevel::Info,
                 "warning" => self.debug_level = DebugLevel::Warning,
-                _ => self.debug_level = DebugLevel::Error,
+                _ => self.debug_level = DebugLevel::Warning,
             }
         }
 

@@ -14,10 +14,10 @@ variable test-num 0 test-num !
   Relies on a variable test-num that indicates the number of the test. )
 
 variable test-num 0 test-num !
-: test-none ( .. -- ) stack-depth 1 test-num +! 
+: test-none ( .. -- ) stack-depth 1 test-num +!
     0= if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
 
-: test-single ( m n.. -- b ) 1 test-num +! 
+: test-single ( m n.. -- b ) ( 1 test-num +! )
     = if test-num ? ."  Passed" else ."    Failed"  test-num @ then  ;
 
 : test-dual ( j k n.. -- b ) 1 test-num +!

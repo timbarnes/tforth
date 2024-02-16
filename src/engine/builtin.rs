@@ -2,7 +2,7 @@
 ///
 /// Set up a table of builtin functions, with names and code
 
-#[allow(dad_code)]
+#[allow(dead_code)]
 use crate::engine::{FileMode, TF};
 use crate::messages::DebugLevel;
 use crate::tokenizer::ForthToken;
@@ -54,7 +54,6 @@ macro_rules! pop1 {
 impl TF {
     fn add(&mut self, name: &str, code: for<'a> fn(&'a mut TF)) {
         self.builtins.push(BuiltInFn::new(name.to_owned(), code));
-        println!("builtin_add - Added: {name}");
     }
 
     pub fn add_builtins(&mut self) {
@@ -73,7 +72,7 @@ impl TF {
         self.add("0<", TF::f_0less);
         self.add(".s", TF::f_dot_s);
         self.add("cr", TF::f_cr);
-        self.add("show_stack", TF::f_show_stack);
+        self.add("show-stack", TF::f_show_stack);
         self.add("hide-stack", TF::f_hide_stack);
         self.add(".s\"", TF::f_dot_s_quote);
         self.add("emit", TF::f_emit);
@@ -89,8 +88,8 @@ impl TF {
         self.add("rot", TF::f_rot);
         self.add("and", TF::f_and);
         self.add("or", TF::f_or);
-        self.add("get", TF::f_over);
-        self.add("store", TF::f_store);
+        self.add("@", TF::f_get);
+        self.add("!", TF::f_store);
         self.add("i", TF::f_i);
         self.add("j", TF::f_j);
         self.add("abort", TF::f_abort);
@@ -127,7 +126,7 @@ impl TF {
         pop2_push1!(self, "<", |a, b| if a < b { -1 } else { 0 });
     }
     fn f_dot(&mut self) {
-        pop1!(self, ".", |a| print!(" {a}"));
+        pop1!(self, ".", |a| print!("{a} "));
     }
     fn f_true(&mut self) {
         self.stack.push(-1);
@@ -263,10 +262,13 @@ impl TF {
         if !self.stack_underflow("@", 1) {
             if let Some(adr) = self.stack.pop() {
                 let address = adr.max(0) as usize;
-                if address < self.variable_stack.len() {
-                    self.stack.push(self.variable_stack[address]);
-                } else {
-                    self.msg.error("@", "Bad variable address", Some(adr));
+                if address < self.dictionary.len() {
+                    match &self.dictionary[address] {
+                        ForthToken::Variable(_n, value) => {
+                            self.stack.push(*value as i64);
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
@@ -275,8 +277,13 @@ impl TF {
         if !self.stack_underflow("!", 2) {
             if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
                 let address = addr.max(0) as usize;
-                if address < self.variable_stack.len() {
-                    self.variable_stack[address] = val;
+                if address < self.dictionary.len() {
+                    match &self.dictionary[address as usize] {
+                        ForthToken::Variable(name, _v) => {
+                            self.dictionary[address] = ForthToken::Variable(name.to_owned(), val);
+                        }
+                        _ => {}
+                    }
                 }
             }
         }

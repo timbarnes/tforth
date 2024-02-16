@@ -28,6 +28,17 @@ impl ControlFrame {
     }
 }
 
+enum OpCode {
+    // used in compiled definitions to reference objects
+    B(usize),  // builtin
+    J(usize),  // jump (branch)
+    W(usize),  // defined word
+    V(usize),  // variable
+    C(i64),    // constant
+    L(i64),    // literal
+    S(String), // an inline string
+}
+
 //#[derive(Debug)]
 pub struct TF {
     pub stack: Vec<i64>,             // the numeric stack, currently integers
@@ -47,7 +58,7 @@ pub struct TF {
     parser: Tokenizer,
     new_word_name: String,
     new_word_definition: Vec<ForthToken>,
-    token: ForthToken,
+    token_ptr: (usize, ForthToken),
     show_stack: bool, // show the stack at the completion of a line of interaction
     step_mode: bool,
 }
@@ -85,7 +96,7 @@ impl TF {
                 parser,
                 new_word_name: String::new(),
                 new_word_definition: Vec::new(),
-                token: ForthToken::Empty,
+                token_ptr: (0, ForthToken::Empty),
                 show_stack: false,
                 step_mode: false,
             }
@@ -143,31 +154,34 @@ impl TF {
     }
 
     pub fn process_token(&mut self) -> bool {
-        let new_token = self.parser.get_token(&self.get_stack()); // Prompt if necessary, return a token
-        match new_token {
-            Some(new_token) => {
+        let opt_token = self.parser.get_token(&self.get_stack()); // Prompt if necessary, return a token
+        match opt_token {
+            Some(token) => {
                 self.msg
-                    .debug("execute_token", "operator is", Some(&self.token));
-                self.token = new_token;
-                match &self.token {
+                    .debug("execute_token", "operator is", Some(&self.token_ptr));
+                self.token_ptr = (0, token);
+                match self.token_ptr.1.clone() {
                     ForthToken::Empty => {
                         return true; // An empty line
                     }
                     ForthToken::Operator(name) => {
-                        // Figure out if it's a definition or not
-                        let idx = self.find_definition(name.as_str());
-                        match idx {
-                            Some(_idx) => {
-                                self.token = ForthToken::Definition(name.clone(), Vec::new())
+                        // Builtin, definition, variable or constant (or undefined)
+                        // check builtins first
+                        let builtin = self.find_builtin(&name);
+                        match builtin {
+                            Some((index, _tok)) => {
+                                // it's a builtin
+                                self.token_ptr =
+                                    (index, ForthToken::Builtin(name.to_owned(), index as u8));
                             }
                             None => {
-                                let idx = self.find_builtin(name);
-                                match idx {
-                                    Some(index) => {
-                                        self.token =
-                                            ForthToken::Builtin(name.to_owned(), index as u8)
+                                let def = self.find_definition(&name);
+                                match def {
+                                    Some(idx) => {
+                                        // it's in the dictionary
+                                        self.token_ptr = (idx, self.dictionary[idx].clone());
                                     }
-                                    None => {}
+                                    None => {} // it's something special, or undefined
                                 }
                             }
                         }
@@ -191,7 +205,7 @@ impl TF {
 
     fn compile_token(&mut self) {
         // We're in compile mode: creating a new definition
-        let tok = &self.token; // the word being compiled
+        let tok = &self.token_ptr.1; // the word being compiled
         match tok {
             ForthToken::Operator(tstring) | ForthToken::Definition(tstring, _) => {
                 if tstring == ";" {
@@ -213,13 +227,13 @@ impl TF {
                 } else {
                     // push the new token onto the definition
                     self.msg
-                        .debug("compile_token", "Pushing", Some(&self.token));
-                    self.new_word_definition.push(self.token.clone());
+                        .debug("compile_token", "Pushing", Some(&self.token_ptr));
+                    self.new_word_definition.push(self.token_ptr.1.clone());
                 }
             }
             _ => {
                 // Text, integer, float, comment all go into the new word definition
-                self.new_word_definition.push(self.token.clone());
+                self.new_word_definition.push(self.token_ptr.1.clone());
             }
         }
     }
@@ -316,7 +330,7 @@ impl TF {
         // Execute a defined token
         self.step(); // gets a debug char if enabled
         program_counter += 1; // base assumption is we're processing one word
-        match &self.token {
+        match &self.token_ptr.1 {
             ForthToken::Empty => return (program_counter, false),
             ForthToken::Integer(num) => {
                 self.stack.push(*num);
@@ -329,16 +343,20 @@ impl TF {
                     "(" => {} // ignore comments
                     ".\"" => {
                         let tail = &info.tail[1..info.tail.len() - 1];
+                        print!("{}", tail);
                     }
                     "s\"" => {
                         let txt = &info.tail;
                         self.text = info.tail[1..txt.len() - 1].to_owned();
                     }
                     "variable" => {
-                        let index = self.variable_stack.len();
+                        // add it to the dictionary
+                        let var = ForthToken::Variable(info.tail.trim().to_owned(), 0);
+                        self.dictionary.push(var);
+                        /* let index = self.variable_stack.len();
                         self.variable_stack.push(0); // create the location for the new variable
                         self.defined_variables
-                            .insert(info.tail.trim().to_owned(), index as i64);
+                            .insert(info.tail.trim().to_owned(), index as i64); */
                         self.msg.debug(
                             "execute_token",
                             "Dealing with a variable called",
@@ -470,16 +488,10 @@ impl TF {
                     _ => (),
                 }
             }
-            ForthToken::Definition(_, _) => self.execute_definition(),
-            ForthToken::Builtin(op, _) => {
-                let index = self.find_builtin(op);
-                match index {
-                    Some(index) => {
-                        let func = &mut self.builtins[index].code;
-                        func(self);
-                    }
-                    None => {}
-                }
+            ForthToken::Definition(_name, _def) => self.execute_definition(),
+            ForthToken::Builtin(_name, code) => self.execute_builtin(*code),
+            ForthToken::Variable(_name, _val) => {
+                self.stack.push(self.token_ptr.0 as i64);
             }
             _ => {}
         }
@@ -492,7 +504,7 @@ impl TF {
         // if so, iterate over the definition, using execute_token()
         let mut program_counter = 0;
         let mut jumped = false;
-        match &self.token {
+        match &self.token_ptr.1 {
             ForthToken::Definition(word_name, _) => {
                 match self.find(word_name) {
                     Some(index) => {
@@ -507,7 +519,7 @@ impl TF {
                                         self.abort_flag = false;
                                         break;
                                     } else {
-                                        self.token = code[program_counter].clone();
+                                        self.token_ptr.1 = code[program_counter].clone();
                                         (program_counter, jumped) =
                                             self.execute_token(program_counter, jumped);
                                     }
@@ -517,9 +529,7 @@ impl TF {
                         }
                     }
                     None => {
-                        if self.defined_variables.contains_key(word_name) {
-                            self.stack.push(self.defined_variables[word_name]); // push the index on the stack
-                        } else if self.defined_constants.contains_key(word_name) {
+                        if self.defined_constants.contains_key(word_name) {
                             self.stack.push(self.defined_constants[word_name]); // push the index on the stack
                         } else {
                             self.msg
@@ -534,6 +544,12 @@ impl TF {
                     .error("execute_definition", "Definition error", None::<bool>);
             }
         }
+    }
+
+    fn execute_builtin(&mut self, code: u8) {
+        let op = &self.builtins[code as usize];
+        let func = op.code;
+        func(self);
     }
 
     pub fn load_file(&mut self, path: &String) -> bool {
@@ -551,7 +567,7 @@ impl TF {
                         std::mem::swap(&mut previous_reader, &mut self.parser.reader);
                         loop {
                             if self.process_token() {
-                                self.msg.debug("loaded", "processed", Some(&self.token));
+                                self.msg.debug("loaded", "processed", Some(&self.token_ptr));
                             } else {
                                 self.msg
                                     .debug("loaded", "No more tokens to read", None::<bool>);
@@ -587,22 +603,22 @@ impl TF {
     fn find_definition(&self, name: &str) -> Option<usize> {
         for i in (0..self.dictionary.len()).rev() {
             match &self.dictionary[i] {
-                ForthToken::Definition(n, _) => {
+                ForthToken::Definition(n, _) | ForthToken::Variable(n, _) => {
                     //println!("{}:{}", i, n);
                     if n == name {
                         return Some(i);
                     }
                 }
-                _ => {} // don't care about variables and constants
+                _ => {}
             }
         }
         None
     }
 
-    fn find_builtin(&self, name: &str) -> Option<usize> {
+    fn find_builtin(&self, name: &str) -> Option<(usize, &BuiltInFn)> {
         for i in 0..self.builtins.len() {
             if self.builtins[i].name == name {
-                return Some(i);
+                return Some((i, &self.builtins[i]));
             }
         }
         None
@@ -657,8 +673,8 @@ impl TF {
                 }
                 println!(";");
             }
-            ForthToken::Variable(name, val) => print!("V:{name}:{val} "),
-            ForthToken::Constant(name, val) => print!("C:{name}:{val} "),
+            ForthToken::Variable(name, val) => print!("V {name}={val} "),
+            ForthToken::Constant(name, val) => print!("C {name}={val} "),
             _ => {}
         }
     }
@@ -689,7 +705,7 @@ impl TF {
     fn step(&mut self) {
         // controls step / debug functions
         if self.step_mode {
-            match &self.token {
+            match &self.token_ptr.1 {
                 ForthToken::Integer(num) => print!("{num}: Step> "),
                 ForthToken::Float(num) => print!("f{num}: Step> "),
                 ForthToken::Operator(op) => print!("{op}: Step> "),
@@ -702,6 +718,7 @@ impl TF {
                 ForthToken::Builtin(name, code) => print!("{}:{:?}", name, code),
                 ForthToken::Definition(name, _def) => print!("{name} "),
                 ForthToken::Empty => print!("ForthToken::Empty: Step> "),
+                ForthToken::Variable(n, v) => print!("{}={}", n, v),
                 _ => print!("variable or constant???"),
             }
             io::stdout().flush().unwrap();
