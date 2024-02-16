@@ -193,7 +193,7 @@ impl TF {
         // We're in compile mode: creating a new definition
         let tok = &self.token; // the word being compiled
         match tok {
-            ForthToken::Operator(tstring) => {
+            ForthToken::Operator(tstring) | ForthToken::Definition(tstring, _) => {
                 if tstring == ";" {
                     // we are at the end of the definition
                     self.calculate_branches();
@@ -588,7 +588,7 @@ impl TF {
         for i in (0..self.dictionary.len()).rev() {
             match &self.dictionary[i] {
                 ForthToken::Definition(n, _) => {
-                    println!("{}:{}", i, n);
+                    //println!("{}:{}", i, n);
                     if n == name {
                         return Some(i);
                     }
