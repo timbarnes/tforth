@@ -228,7 +228,7 @@ impl TF {
                     self.compile_token();
                 } else {
                     // we're in immediate mode
-                    self.execute_token(0);
+                    self.execute_token();
                 }
                 true
             }
@@ -337,12 +337,11 @@ impl TF {
         }
     }
 
-    fn execute_token(&mut self, mut program_counter: usize) -> usize {
+    fn execute_token(&mut self) {
         // Execute a defined token
         self.step(); // gets a debug char if enabled
-        program_counter += 1; // base assumption is we're processing one word
         match &self.token_ptr.1 {
-            ForthToken::Empty => return program_counter,
+            ForthToken::Empty => return,
             ForthToken::Integer(num) => {
                 self.stack.push(*num);
             }
@@ -414,7 +413,6 @@ impl TF {
             }
             _ => {}
         }
-        program_counter
     }
 
     fn execute_definition(&mut self) {
