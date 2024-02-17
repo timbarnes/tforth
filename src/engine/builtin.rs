@@ -94,7 +94,7 @@ impl TF {
         self.add("j", TF::f_j);
         self.add("abort", TF::f_abort);
         self.add("see-all", TF::f_see_all);
-        self.add("stack-depth", TF::f_stack_depth);
+        self.add("depth", TF::f_stack_depth);
         self.add("key", TF::f_key);
         self.add("r/w", TF::f_r_w);
         self.add("r/o", TF::f_r_o);
@@ -289,6 +289,8 @@ impl TF {
     fn f_r_get(&mut self) {
         if self.return_stack.len() > 0 {
             self.stack.push(*self.return_stack.last().unwrap());
+        } else {
+            self.msg.error("r@", "Return stack underflow", None::<bool>);
         }
     }
     fn f_i(&mut self) {

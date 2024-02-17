@@ -127,7 +127,6 @@ impl TF {
             true
         }
     }
-
     fn set_compile_mode(&mut self, value: bool) {
         self.var_set(self.compile_ptr, if value { -1 } else { 0 });
     }
@@ -135,13 +134,27 @@ impl TF {
     pub fn set_abort_flag(&mut self, v: bool) {
         self.var_set(self.abort_ptr, if v { -1 } else { 0 });
     }
-
     pub fn get_abort_flag(&mut self) -> bool {
         if self.var_get(self.abort_ptr) == 0 {
             false
         } else {
             true
         }
+    }
+
+    fn set_program_counter(&mut self, val: usize) {
+        self.var_set(self.pc_ptr, val as i64);
+    }
+    fn get_program_counter(&mut self) -> usize {
+        self.var_get(self.pc_ptr) as usize
+    }
+    fn increment_program_counter(&mut self, val: usize) {
+        let new = self.get_program_counter() + val;
+        self.var_set(self.pc_ptr, (new) as i64);
+    }
+    fn decrement_program_counter(&mut self, val: usize) {
+        let new = self.get_program_counter() - val;
+        self.var_set(self.pc_ptr, (new) as i64);
     }
 
     fn set_exit_flag(&mut self) {
@@ -327,7 +340,7 @@ impl TF {
                 }
                 OpCode::Jnext(delta) => {
                     if let Some(slot) = loop_stack.pop() {
-                        self.new_word_definition[slot] = OpCode::Jfor(step - slot - 1);
+                        self.new_word_definition[slot] = OpCode::Jfor(step - slot);
                     }
                     self.new_word_definition[step] = OpCode::Jnext(step - delta + 1);
                 }
@@ -418,8 +431,8 @@ impl TF {
     fn execute_definition(&mut self) {
         // execute a word defined in forth
         // see if the word is in the dictionary.
-        // if so, iterate over the definition, using execute_token()
-        let mut program_counter = 0;
+        // if so, iterate over the definition, using execute_opcode()
+        // save the value
         match &self.token_ptr.1 {
             ForthToken::Definition(word_name, _) => {
                 match self.find_definition(word_name) {
@@ -427,22 +440,43 @@ impl TF {
                         let definition = &self.dictionary[index].clone();
                         match definition {
                             ForthToken::Definition(_n, code) => {
-                                while program_counter < code.len() {
+                                // start by saving the program counter
+                                let pc = self.get_program_counter();
+                                self.return_stack.push(pc as i64);
+                                self.set_program_counter(0);
+                                // loop through the definition
+                                while self.get_program_counter() < code.len() {
                                     if self.get_abort_flag() {
                                         // code.clear();
                                         self.stack.clear();
                                         self.return_stack.clear();
+                                        self.set_program_counter(0);
                                         self.set_abort_flag(false);
-                                        break;
+                                        return;
                                     } else {
-                                        program_counter = self.execute_opcode(
-                                            &code[program_counter],
-                                            program_counter,
-                                        );
+                                        let opcode = &code[self.get_program_counter()];
+                                        self.execute_opcode(opcode);
+                                        // self.increment_program_counter(1);
                                     }
                                 }
+                                // pop the program counter and restore it
+                                if let Some(pc) = self.return_stack.pop() {
+                                    self.set_program_counter(pc as usize);
+                                } else {
+                                    self.msg.error(
+                                        "execute-definition",
+                                        "Return stack underflow",
+                                        None::<bool>,
+                                    );
+                                }
                             }
-                            _ => {}
+                            _ => {
+                                self.msg.error(
+                                    "execute-definition",
+                                    "Not a word",
+                                    Some(&self.token_ptr),
+                                );
+                            }
                         }
                     }
                     None => {
@@ -451,7 +485,9 @@ impl TF {
                         } else {
                             self.msg
                                 .error("execute_definition", "Undefined word", Some(word_name));
-                            return;
+                            if let Some(pc) = self.return_stack.pop() {
+                                self.set_program_counter(pc as usize); // pop the pc
+                            }
                         }
                     }
                 };
@@ -459,13 +495,14 @@ impl TF {
             _ => {
                 self.msg
                     .error("execute_definition", "Definition error", None::<bool>);
+                self.set_abort_flag(true);
             }
         }
     }
 
-    fn execute_opcode(&mut self, op_code: &OpCode, mut program_counter: usize) -> usize {
+    fn execute_opcode(&mut self, op_code: &OpCode) {
         // run a single opcode, updating the PC if required
-        program_counter += 1;
+        self.increment_program_counter(1);
         match op_code {
             OpCode::L(n) => self.stack.push(*n),
             OpCode::Lstring(st) => print!("{}", st),
@@ -476,24 +513,21 @@ impl TF {
                 if !self.stack_underflow("if", 1) {
                     let b = self.stack.pop();
                     if b.unwrap() == 0 {
-                        program_counter += offset;
-                    } else {
+                        self.increment_program_counter(*offset);
                     }
                 }
-            } // conditional semantics
-            OpCode::Jelse(offset) => {
-                program_counter += offset;
             }
-            OpCode::Jthen(_offset) => {} // loop semantics
+            OpCode::Jelse(offset) => {
+                self.increment_program_counter(*offset);
+            }
+            OpCode::Jthen(_offset) => {}
             OpCode::Jfor(offset) => {
                 let count = self.stack.pop();
                 match count {
-                    Some(count) => {
-                        let counter = count - 1;
-                        if counter <= 0 {
-                            program_counter += offset;
-                        } else {
-                            self.return_stack.push(counter);
+                    Some(counter) => {
+                        self.return_stack.push(counter);
+                        if counter < 0 {
+                            self.increment_program_counter(*offset - 1);
                         }
                     }
                     None => {} // stack error
@@ -503,15 +537,18 @@ impl TF {
                 let count = self.return_stack.pop();
                 match count {
                     Some(count) => {
-                        self.stack.push(count);
-                        program_counter -= offset;
+                        if count > 0 {
+                            self.stack.push(count - 1);
+                            self.decrement_program_counter(*offset);
+                        }
                     }
-                    None => {}
+                    None => self
+                        .msg
+                        .error("NEXT", "Return stack underflow", None::<bool>),
                 }
             }
             _ => {}
         }
-        program_counter
     }
 
     fn execute_builtin(&mut self, code: usize) {
@@ -643,11 +680,11 @@ impl TF {
                                 _ => {}
                             }
                         }
-                        OpCode::Jif(_offset) => print!("if "),
-                        OpCode::Jelse(_offset) => print!("else "),
-                        OpCode::Jthen(_offset) => print!("then "),
-                        OpCode::Jfor(_offset) => print!("for "),
-                        OpCode::Jnext(_offset) => print!("next "),
+                        OpCode::Jif(offset) => print!("if:{offset} "),
+                        OpCode::Jelse(offset) => print!("else:{offset} "),
+                        OpCode::Jthen(offset) => print!("then:{offset} "),
+                        OpCode::Jfor(offset) => print!("for:{offset} "),
+                        OpCode::Jnext(offset) => print!("next:{offset} "),
                         OpCode::Lstring(info) => print!(".\" {info} "),
                         OpCode::Lparen(txt) => print!("({} ", txt),
                         OpCode::L(n) => print!("{n} "),
@@ -662,7 +699,7 @@ impl TF {
                             }
                         }
                         OpCode::Noop => print!("Noop "),
-                        OpCode::D(name) => print!("!!Definition not implemented"),
+                        OpCode::D(_name) => print!("!!Definition not implemented"),
                     }
                 }
                 println!(";");
