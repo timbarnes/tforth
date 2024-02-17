@@ -30,19 +30,20 @@ impl ControlFrame {
 #[derive(Clone, Debug)]
 pub enum OpCode {
     // used in compiled definitions to reference objects
-    B(usize),     // builtin
-    Jif(usize),   // if (branch)
-    Jelse(usize), // else (branch)
-    Jthen(usize), // then (branch)
-    Jfor(usize),  // for (branch)
-    Jnext(usize), // next (branch)
-    W(usize),     // defined word
-    V(usize),     // variable
-    C(usize),     // constant
-    L(i64),       // literal
-    F(f64),       // float literal
-    S(String),    // an inline string
-    Noop,         // do nothing
+    B(usize),        // builtin
+    Lparen(String),  // paren (comment)
+    Jif(usize),      // if (branch)
+    Jelse(usize),    // else (branch)
+    Jthen(usize),    // then (branch)
+    Jfor(usize),     // for (branch)
+    Jnext(usize),    // next (branch)
+    W(usize),        // defined word
+    V(usize),        // variable
+    C(usize),        // constant
+    L(i64),          // literal
+    F(f64),          // float literal
+    Lstring(String), // an inline string
+    Noop,            // do nothing
 }
 
 //#[derive(Debug)]
@@ -247,7 +248,11 @@ impl TF {
             }
             ForthToken::Variable(_, _) => op_code = OpCode::V(*idx),
             ForthToken::Constant(_, _) => op_code = OpCode::C(*idx),
-            ForthToken::Forward(info) => op_code = OpCode::S(info.tail.clone()),
+            ForthToken::Forward(info) => match info.word.as_str() {
+                ".\"" => op_code = OpCode::Lstring(info.tail.to_owned()),
+                "(" => op_code = OpCode::Lparen(info.tail.to_owned()),
+                _ => op_code = OpCode::Noop,
+            },
             _ => op_code = OpCode::Noop,
         }
         match op_code {
@@ -444,7 +449,7 @@ impl TF {
         program_counter += 1;
         match op_code {
             OpCode::L(n) => self.stack.push(*n),
-            OpCode::S(st) => print!("{}", st),
+            OpCode::Lstring(st) => print!("{}", st),
             OpCode::B(code) => self.execute_builtin(*code),
             OpCode::V(idx) => self.stack.push(*idx as i64), // f_variable returns the address of the variable
             OpCode::C(idx) => self.stack.push(self.f_constant(*idx)), // get the constant's value
@@ -628,9 +633,8 @@ impl TF {
                         OpCode::Jthen(offset) => print!("then:{offset} "),
                         OpCode::Jfor(offset) => print!("for:{offset} "),
                         OpCode::Jnext(offset) => print!("next:{offset} "),
-                        OpCode::S(info) => {
-                            print!(".\" {info} ");
-                        }
+                        OpCode::Lstring(info) => print!(".\" {info} "),
+                        OpCode::Lparen(txt) => print!("({} ", txt),
                         OpCode::L(n) => print!("{n} "),
                         OpCode::V(idx) => {
                             if let ForthToken::Variable(name, val) = &self.dictionary[*idx] {
