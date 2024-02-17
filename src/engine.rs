@@ -228,7 +228,7 @@ impl TF {
                     self.compile_token();
                 } else {
                     // we're in immediate mode
-                    self.execute_token(0, false);
+                    self.execute_token(0);
                 }
                 true
             }
@@ -337,12 +337,12 @@ impl TF {
         }
     }
 
-    fn execute_token(&mut self, mut program_counter: usize, jumped: bool) -> (usize, bool) {
+    fn execute_token(&mut self, mut program_counter: usize) -> usize {
         // Execute a defined token
         self.step(); // gets a debug char if enabled
         program_counter += 1; // base assumption is we're processing one word
         match &self.token_ptr.1 {
-            ForthToken::Empty => return (program_counter, false),
+            ForthToken::Empty => return program_counter,
             ForthToken::Integer(num) => {
                 self.stack.push(*num);
             }
@@ -414,7 +414,7 @@ impl TF {
             }
             _ => {}
         }
-        (program_counter, jumped)
+        program_counter
     }
 
     fn execute_definition(&mut self) {
@@ -422,7 +422,6 @@ impl TF {
         // see if the word is in the dictionary.
         // if so, iterate over the definition, using execute_token()
         let mut program_counter = 0;
-        let mut jumped = false;
         match &self.token_ptr.1 {
             ForthToken::Definition(word_name, _) => {
                 match self.find_definition(word_name) {
@@ -438,10 +437,9 @@ impl TF {
                                         self.set_abort_flag(false);
                                         break;
                                     } else {
-                                        (program_counter, jumped) = self.execute_opcode(
+                                        program_counter = self.execute_opcode(
                                             &code[program_counter],
                                             program_counter,
-                                            jumped,
                                         );
                                     }
                                 }
@@ -467,12 +465,7 @@ impl TF {
         }
     }
 
-    fn execute_opcode(
-        &mut self,
-        op_code: &OpCode,
-        mut program_counter: usize,
-        mut jumped: bool,
-    ) -> (usize, bool) {
+    fn execute_opcode(&mut self, op_code: &OpCode, mut program_counter: usize) -> usize {
         // run a single opcode, updating the PC if required
         program_counter += 1;
         match op_code {
@@ -486,23 +479,14 @@ impl TF {
                     let b = self.stack.pop();
                     if b.unwrap() == 0 {
                         program_counter += offset;
-                        jumped = true;
                     } else {
-                        jumped = false;
                     }
                 }
             } // conditional semantics
             OpCode::Jelse(offset) => {
-                if jumped {
-                    jumped = false
-                } else {
-                    program_counter += offset;
-                    jumped = true;
-                }
+                program_counter += offset;
             }
-            OpCode::Jthen(_offset) => {
-                jumped = false;
-            } // loop semantics
+            OpCode::Jthen(_offset) => {} // loop semantics
             OpCode::Jfor(offset) => {
                 let count = self.stack.pop();
                 match count {
@@ -510,10 +494,8 @@ impl TF {
                         let counter = count - 1;
                         if counter <= 0 {
                             program_counter += offset;
-                            jumped = true;
                         } else {
                             self.return_stack.push(counter);
-                            jumped = false;
                         }
                     }
                     None => {} // stack error
@@ -525,14 +507,13 @@ impl TF {
                     Some(count) => {
                         self.stack.push(count);
                         program_counter -= offset;
-                        jumped = true;
                     }
                     None => {}
                 }
             }
             _ => {}
         }
-        (program_counter, jumped)
+        program_counter
     }
 
     fn execute_builtin(&mut self, code: usize) {
