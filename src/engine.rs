@@ -441,6 +441,7 @@ impl TF {
         mut jumped: bool,
     ) -> (usize, bool) {
         // run a single opcode, updating the PC if required
+        program_counter += 1;
         match op_code {
             OpCode::L(n) => self.stack.push(*n),
             OpCode::S(st) => print!("{}", st),
@@ -498,7 +499,7 @@ impl TF {
             }
             _ => {}
         }
-        (program_counter + 1, jumped)
+        (program_counter, jumped)
     }
 
     fn execute_builtin(&mut self, code: usize) {
