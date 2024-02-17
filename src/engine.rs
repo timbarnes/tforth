@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use crate::doc;
 use crate::messages::Msg;
 use crate::reader::Reader;
-use crate::tokenizer::{BranchInfo, ForthToken, Tokenizer};
+use crate::tokenizer::{ForthToken, Tokenizer};
 use builtin::BuiltInFn;
 
 #[derive(Debug)]
@@ -27,16 +27,22 @@ impl ControlFrame {
         }
     }
 }
-
-enum OpCode {
+#[derive(Clone, Debug)]
+pub enum OpCode {
     // used in compiled definitions to reference objects
-    B(usize),  // builtin
-    J(usize),  // jump (branch)
-    W(usize),  // defined word
-    V(usize),  // variable
-    C(i64),    // constant
-    L(i64),    // literal
-    S(String), // an inline string
+    B(usize),     // builtin
+    Jif(usize),   // if (branch)
+    Jelse(usize), // else (branch)
+    Jthen(usize), // then (branch)
+    Jfor(usize),  // for (branch)
+    Jnext(usize), // next (branch)
+    W(usize),     // defined word
+    V(usize),     // variable
+    C(usize),     // constant
+    L(i64),       // literal
+    F(f64),       // float literal
+    S(String),    // an inline string
+    Noop,         // do nothing
 }
 
 //#[derive(Debug)]
@@ -47,7 +53,7 @@ pub struct TF {
     pub variable_stack: Vec<i64>,    // where variables are stored
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
-    control_stack: Vec<ControlFrame>, // for do loops etc.
+    return_stack: Vec<i64>,          // for do loops etc.
     builtin_doc: HashMap<String, String>, // doc strings for built-in words
     text: String,                    // the current s".."" string
     file_mode: FileMode,
@@ -57,7 +63,7 @@ pub struct TF {
     pub msg: Msg,
     parser: Tokenizer,
     new_word_name: String,
-    new_word_definition: Vec<ForthToken>,
+    new_word_definition: Vec<OpCode>,
     token_ptr: (usize, ForthToken),
     show_stack: bool, // show the stack at the completion of a line of interaction
     step_mode: bool,
@@ -86,7 +92,7 @@ impl TF {
                 // constant_stack: Vec::new(),
                 defined_variables: HashMap::new(),
                 defined_constants: HashMap::new(),
-                control_stack: Vec::new(),
+                return_stack: Vec::new(),
                 builtin_doc: doc_strings,
                 file_mode: FileMode::Unset,
                 compile_mode: false,
@@ -172,7 +178,7 @@ impl TF {
                             Some((index, _tok)) => {
                                 // it's a builtin
                                 self.token_ptr =
-                                    (index, ForthToken::Builtin(name.to_owned(), index as u8));
+                                    (index, ForthToken::Builtin(name.to_owned(), index));
                             }
                             None => {
                                 let def = self.find_definition(&name);
@@ -205,7 +211,8 @@ impl TF {
 
     fn compile_token(&mut self) {
         // We're in compile mode: creating a new definition
-        let tok = &self.token_ptr.1; // the word being compiled
+        let (idx, tok) = &self.token_ptr; // the word being compiled
+        let mut op_code = OpCode::Noop;
         match tok {
             ForthToken::Operator(tstring) | ForthToken::Definition(tstring, _) => {
                 if tstring == ";" {
@@ -221,112 +228,83 @@ impl TF {
                 } else if self.new_word_name.is_empty() {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
-                } else if tstring == ":" {
-                    self.msg
-                        .warning("compile_token", "Illegal inside definition", Some(":"));
                 } else {
-                    // push the new token onto the definition
-                    self.msg
-                        .debug("compile_token", "Pushing", Some(&self.token_ptr));
-                    self.new_word_definition.push(self.token_ptr.1.clone());
+                    // build the opcode and push it onto the definition
+                    op_code = OpCode::W(*idx);
                 }
             }
-            _ => {
-                // Text, integer, float, comment all go into the new word definition
-                self.new_word_definition.push(self.token_ptr.1.clone());
+            ForthToken::Integer(val) => op_code = OpCode::L(*val),
+            ForthToken::Builtin(_n, code) => op_code = OpCode::B(*code),
+            ForthToken::Jump(name, delta) => {
+                match name.as_str() {
+                    "if" => op_code = OpCode::Jif(*delta),
+                    "else" => op_code = OpCode::Jelse(*delta),
+                    "then" => op_code = OpCode::Jthen(*delta),
+                    "for" => op_code = OpCode::Jfor(*delta),
+                    "next" => op_code = OpCode::Jnext(*delta),
+                    _ => {}
+                };
             }
+            ForthToken::Variable(_, _) => op_code = OpCode::V(*idx),
+            ForthToken::Constant(_, _) => op_code = OpCode::C(*idx),
+            ForthToken::Forward(info) => op_code = OpCode::S(info.tail.clone()),
+            _ => op_code = OpCode::Noop,
+        }
+        match op_code {
+            OpCode::Noop => {}
+            _ => self.new_word_definition.push(op_code),
         }
     }
 
     fn calculate_branches(&mut self) {
-        // replace words that incorporate branches with ForthToken::Branch
+        // replace words that incorporate branches with OpCode::B
         // and set up offsets as required.
-        let mut loop_stack = Vec::<(&str, usize, usize)>::new();
-        let mut conditional_stack = Vec::<(&str, usize, usize)>::new();
-        let mut idx = 0; // points to the current token
-        while idx < self.new_word_definition.len() {
-            let cur_token = self.new_word_definition[idx].clone();
-            if let ForthToken::Branch(branch_info) = cur_token {
-                let word = &branch_info.word;
-
-                match word.as_str() {
-                    "if" => {
-                        // put the info on the stack
-                        conditional_stack.push(("if", idx, branch_info.branch_id));
-                    }
-                    "else" => {
-                        // pop stack, insert new ZeroEqual Branch token with offset
-                        if let Some((_word, place, id)) = conditional_stack.pop() {
-                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                "if".to_string(),
-                                idx - place,
-                                id,
-                            ));
-                            conditional_stack.push(("else", idx, id));
-                        }
-                    }
-                    "then" => {
-                        // pop stack, insert new Unconditional Branch token with offset
-                        if let Some((word, place, id)) = conditional_stack.pop() {
-                            self.new_word_definition[place] = ForthToken::Branch(BranchInfo::new(
-                                word.to_owned(),
-                                idx - place,
-                                id, // IF statements don't need a branch_id
-                            ));
-                            self.new_word_definition[idx] =
-                                ForthToken::Branch(BranchInfo::new("then".to_string(), 0, id));
-                        }
-                    }
-                    "do" => {
-                        // push onto branch_stack
-                        loop_stack.push(("do", idx, branch_info.branch_id));
-                    }
-                    "leave" => {
-                        loop_stack.push(("leave", idx, branch_info.branch_id));
-                    }
-                    "loop" | "+loop" => {
-                        let mut branch_id = 0;
-                        // Get one record for a start
-                        if let Some((name, place, id)) = loop_stack.pop() {
-                            let loop_id = id; // capture id for consistency
-                            let mut delta: usize = 0; // capture branch-back distance from do
-                            if name == "leave" {
-                                self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new("leave".to_owned(), idx - place, loop_id),
-                                );
-                                branch_id = id; // save for the DO and LOOP records
-                            } else {
-                                // it must be a DO
-                                self.new_word_definition[place] = ForthToken::Branch(
-                                    BranchInfo::new("do".to_owned(), idx - place - 1, loop_id),
-                                );
-                                delta = place;
-                            }
-                            // if it was LEAVE, we need another record; otherwise proceed to (+)LOOP
-                            if branch_id != 0 {
-                                // get another record
-                                if let Some((_name, place, _id)) = loop_stack.pop() {
-                                    self.new_word_definition[place] = ForthToken::Branch(
-                                        BranchInfo::new("do".to_owned(), idx - place - 1, loop_id),
-                                    );
-                                }
-                            }
-                            // process the LOOP token
-                            self.new_word_definition[idx] = ForthToken::Branch(BranchInfo::new(
-                                word.clone(),
-                                idx - delta + 1,
-                                loop_id,
-                            ));
-                        }
-                    }
-                    _ => {}
+        let mut loop_stack = Vec::<usize>::new();
+        let mut conditional_stack = Vec::<usize>::new();
+        let mut step = 0; // points to the current token
+        while step < self.new_word_definition.len() {
+            match self.new_word_definition[step] {
+                OpCode::Jif(_delta) => {
+                    conditional_stack.push(step); // the location of the if
                 }
+                OpCode::Jelse(_delta) => {
+                    // pop stack, insert updated Jif
+                    if let Some(slot) = conditional_stack.pop() {
+                        self.new_word_definition[slot] = OpCode::Jif(step - slot);
+                        conditional_stack.push(step);
+                    }
+                }
+                OpCode::Jthen(_delta) => {
+                    // pop stack, insert new if or else token with offset
+                    if let Some(slot) = conditional_stack.pop() {
+                        match &self.new_word_definition[slot] {
+                            OpCode::Jif(_delta) => {
+                                self.new_word_definition[slot] = OpCode::Jif(step - slot);
+                            }
+                            OpCode::Jelse(_delta) => {
+                                self.new_word_definition[slot] = OpCode::Jelse(step - slot);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                OpCode::Jfor(_delta) => {
+                    // push onto branch_stack
+                    loop_stack.push(step);
+                }
+                OpCode::Jnext(delta) => {
+                    if let Some(slot) = loop_stack.pop() {
+                        self.new_word_definition[slot] = OpCode::Jfor(step - slot - 1);
+                    }
+                    self.new_word_definition[step] = OpCode::Jnext(step - delta + 1);
+                }
+                _ => {}
             }
-            idx += 1;
+            step += 1;
         }
     }
 
-    fn execute_token(&mut self, mut program_counter: usize, mut jumped: bool) -> (usize, bool) {
+    fn execute_token(&mut self, mut program_counter: usize, jumped: bool) -> (usize, bool) {
         // Execute a defined token
         self.step(); // gets a debug char if enabled
         program_counter += 1; // base assumption is we're processing one word
@@ -396,98 +374,6 @@ impl TF {
                     _ => {}
                 }
             }
-            ForthToken::Branch(info) => {
-                match info.word.as_str() {
-                    // runtime semantics
-                    "if" => {
-                        if !self.stack_underflow("if", 1) {
-                            let b = self.stack.pop();
-                            if b.unwrap() == 0 {
-                                program_counter += info.offset;
-                                jumped = true;
-                            } else {
-                                jumped = false;
-                            }
-                        }
-                    }
-                    "else" => {
-                        if jumped {
-                            jumped = false
-                        } else {
-                            program_counter += info.offset;
-                            jumped = true;
-                        }
-                    }
-                    "then" => {
-                        jumped = false;
-                    }
-                    "do" => {
-                        // ( limit first -- )
-                        // first time, (branch_id is not top of control stack) grab limit and first values
-                        // and put them on the control stack
-                        if self.control_stack.is_empty()
-                            || self.control_stack[self.control_stack.len() - 1].id != info.branch_id
-                        {
-                            // it's our first time
-                            // place popped values on the control stack
-                            if let (Some(init), Some(end)) = (self.stack.pop(), self.stack.pop()) {
-                                self.control_stack.push(ControlFrame::new(
-                                    info.branch_id,
-                                    init,
-                                    end,
-                                ));
-                            } else {
-                                self.msg.error(
-                                    "execute_token",
-                                    "DO requires END and INIT values on stack",
-                                    None::<bool>,
-                                );
-                                self.abort_flag = true;
-                                return (program_counter, jumped);
-                            }
-                        }
-                    }
-                    "loop" => {
-                        let current_frame = self.control_stack.len() - 1;
-                        self.control_stack[current_frame].incr += 1;
-                        if self.control_stack[current_frame].incr
-                            < self.control_stack[current_frame].end
-                        {
-                            program_counter -= info.offset;
-                            jumped = true;
-                        } else {
-                            jumped = false;
-                            self.control_stack.pop();
-                        }
-                    }
-                    "+loop" => {
-                        // get the increment from the calculation stack
-                        if let Some(increment) = self.stack.pop() {
-                            let current_frame = self.control_stack.len() - 1;
-                            self.control_stack[current_frame].incr += increment;
-                            if self.control_stack[current_frame].incr
-                                < self.control_stack[current_frame].end
-                            {
-                                program_counter -= info.offset;
-                                jumped = true;
-                            } else {
-                                // program_counter += 1;
-                                jumped = false;
-                                self.control_stack.pop();
-                            }
-                        } else {
-                            self.msg
-                                .error("+loop", "No increment value on stack", None::<bool>);
-                            self.abort_flag = true;
-                        }
-                    }
-                    "leave" => {
-                        self.control_stack.pop();
-                        program_counter += info.offset;
-                    }
-                    _ => (),
-                }
-            }
             ForthToken::Definition(_name, _def) => self.execute_definition(),
             ForthToken::Builtin(_name, code) => self.execute_builtin(*code),
             ForthToken::Variable(_name, _val) => {
@@ -506,22 +392,24 @@ impl TF {
         let mut jumped = false;
         match &self.token_ptr.1 {
             ForthToken::Definition(word_name, _) => {
-                match self.find(word_name) {
+                match self.find_definition(word_name) {
                     Some(index) => {
-                        let definition = self.dictionary[index].clone();
+                        let definition = &self.dictionary[index].clone();
                         match definition {
                             ForthToken::Definition(_n, code) => {
                                 while program_counter < code.len() {
                                     if self.abort_flag {
                                         // code.clear();
                                         self.stack.clear();
-                                        self.control_stack.clear();
+                                        self.return_stack.clear();
                                         self.abort_flag = false;
                                         break;
                                     } else {
-                                        self.token_ptr.1 = code[program_counter].clone();
-                                        (program_counter, jumped) =
-                                            self.execute_token(program_counter, jumped);
+                                        (program_counter, jumped) = self.execute_opcode(
+                                            &code[program_counter],
+                                            program_counter,
+                                            jumped,
+                                        );
                                     }
                                 }
                             }
@@ -546,8 +434,75 @@ impl TF {
         }
     }
 
-    fn execute_builtin(&mut self, code: u8) {
-        let op = &self.builtins[code as usize];
+    fn execute_opcode(
+        &mut self,
+        op_code: &OpCode,
+        mut program_counter: usize,
+        mut jumped: bool,
+    ) -> (usize, bool) {
+        // run a single opcode, updating the PC if required
+        match op_code {
+            OpCode::L(n) => self.stack.push(*n),
+            OpCode::S(st) => print!("{}", st),
+            OpCode::B(code) => self.execute_builtin(*code),
+            OpCode::V(idx) => self.stack.push(*idx as i64), // f_variable returns the address of the variable
+            OpCode::C(idx) => self.stack.push(self.f_constant(*idx)), // get the constant's value
+            OpCode::Jif(offset) => {
+                if !self.stack_underflow("if", 1) {
+                    let b = self.stack.pop();
+                    if b.unwrap() == 0 {
+                        program_counter += offset;
+                        jumped = true;
+                    } else {
+                        jumped = false;
+                    }
+                }
+            } // conditional semantics
+            OpCode::Jelse(offset) => {
+                if jumped {
+                    jumped = false
+                } else {
+                    program_counter += offset;
+                    jumped = true;
+                }
+            }
+            OpCode::Jthen(_offset) => {
+                jumped = false;
+            } // loop semantics
+            OpCode::Jfor(offset) => {
+                let count = self.stack.pop();
+                match count {
+                    Some(count) => {
+                        let counter = count - 1;
+                        if counter <= 0 {
+                            program_counter += offset;
+                            jumped = true;
+                        } else {
+                            self.return_stack.push(counter);
+                            jumped = false;
+                        }
+                    }
+                    None => {} // stack error
+                }
+            }
+            OpCode::Jnext(offset) => {
+                let count = self.return_stack.pop();
+                match count {
+                    Some(count) => {
+                        self.stack.push(count);
+                        program_counter -= offset;
+                        jumped = true;
+                    }
+                    None => {}
+                }
+            }
+            _ => {}
+        }
+        (program_counter + 1, jumped)
+    }
+
+    fn execute_builtin(&mut self, code: usize) {
+        let op = &self.builtins[code];
         let func = op.code;
         func(self);
     }
@@ -598,6 +553,13 @@ impl TF {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
         self.load_file(&self.text.clone());
+    }
+
+    fn f_constant(&self, idx: usize) -> i64 {
+        match &self.dictionary[idx] {
+            ForthToken::Constant(_n, v) => *v,
+            _ => 0,
+        }
     }
 
     fn find_definition(&self, name: &str) -> Option<usize> {
@@ -657,18 +619,29 @@ impl TF {
                 print!(": {name} ");
                 for word in def {
                     match word {
-                        ForthToken::Integer(num) => print!("{num} "),
-                        ForthToken::Float(num) => print!("f{num} "),
-                        ForthToken::Builtin(op, code) => print!("{op}:{code} "),
-                        ForthToken::Definition(name, _def) => print!("{name} "),
-                        ForthToken::Branch(info) => {
-                            print!("{}:{}:{} ", info.word, info.offset, info.branch_id);
+                        OpCode::F(f) => print!("f{} ", f),
+                        OpCode::B(idx) => print!("B{idx} "),
+                        OpCode::W(_idx) => print!("{name} "),
+                        OpCode::Jif(offset) => print!("if:{offset} "),
+                        OpCode::Jelse(offset) => print!("else:{offset} "),
+                        OpCode::Jthen(offset) => print!("then:{offset} "),
+                        OpCode::Jfor(offset) => print!("for:{offset} "),
+                        OpCode::Jnext(offset) => print!("next:{offset} "),
+                        OpCode::S(info) => {
+                            print!(".\" {info} ");
                         }
-                        ForthToken::Forward(info) => {
-                            print!("{}{} ", info.word, info.tail);
+                        OpCode::L(n) => print!("{n} "),
+                        OpCode::V(idx) => {
+                            if let ForthToken::Variable(name, val) = &self.dictionary[*idx] {
+                                print!("V {}={} ", name, val);
+                            }
                         }
-                        ForthToken::Empty => print!("ForthToken::Empty "),
-                        _ => {}
+                        OpCode::C(idx) => {
+                            if let ForthToken::Constant(name, val) = &self.dictionary[*idx] {
+                                print!("C {}={} ", name, val);
+                            }
+                        }
+                        OpCode::Noop => print!("Noop "),
                     }
                 }
                 println!(";");
@@ -691,15 +664,8 @@ impl TF {
         println!("Calculation Stack: {}", self.get_stack());
     }
 
-    fn print_control_stack(&self) {
-        println!("Control     stack: {:?}", self.control_stack);
-    }
-
-    fn print_variables(&self) {
-        println!("Variables:");
-        for (name, val) in self.defined_variables.iter() {
-            println!("{name} = {val}");
-        }
+    fn print_return_stack(&self) {
+        println!("Return     stack: {:?}", self.return_stack);
     }
 
     fn step(&mut self) {
@@ -709,8 +675,8 @@ impl TF {
                 ForthToken::Integer(num) => print!("{num}: Step> "),
                 ForthToken::Float(num) => print!("f{num}: Step> "),
                 ForthToken::Operator(op) => print!("{op}: Step> "),
-                ForthToken::Branch(info) => {
-                    print!("{}:{}:{}: Step> ", info.word, info.offset, info.branch_id);
+                ForthToken::Jump(name, offset) => {
+                    print!("{name}:{}: Step> ", offset);
                 }
                 ForthToken::Forward(info) => {
                     print!("{}{}: Step> ", info.word, info.tail);
@@ -725,12 +691,12 @@ impl TF {
             match self.parser.reader.read_char() {
                 Some('s') => {
                     self.print_stack();
-                    self.print_control_stack();
+                    self.print_return_stack();
                 }
-                Some('v') => self.print_variables(),
+                // Some('v') => self.print_variables(),
                 Some('a') => {
                     self.print_stack();
-                    self.print_variables();
+                    //self.print_variables();
                 }
                 Some('c') => self.step_mode = false,
                 Some(_) | None => {}

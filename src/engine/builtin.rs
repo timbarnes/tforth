@@ -103,8 +103,6 @@ impl TF {
         self.add("debuglevel", TF::f_debuglevel);
         self.add("step-on", TF::f_step_on);
         self.add("step-off", TF::f_step_off);
-
-        // self.add("see", TF::f_see_word);
     }
 
     fn f_plus(&mut self) {
@@ -291,7 +289,7 @@ impl TF {
 
     fn f_i(&mut self) {
         // print the index of the current top-level loop
-        if self.control_stack.is_empty() {
+        if self.return_stack.is_empty() {
             self.msg.warning(
                 "I",
                 "Can only be used inside a DO .. LOOP structure",
@@ -299,12 +297,12 @@ impl TF {
             );
         } else {
             self.stack
-                .push(self.control_stack[self.control_stack.len() - 1].incr);
+                .push(self.return_stack[self.return_stack.len() - 1]);
         }
     }
     fn f_j(&mut self) {
         // print the index of the current second-level (outer) loop
-        if self.control_stack.len() < 2 {
+        if self.return_stack.len() < 2 {
             self.msg.warning(
                 "I",
                 "Can only be used inside a nested DO .. LOOP structure",
@@ -312,7 +310,7 @@ impl TF {
             );
         } else {
             self.stack
-                .push(self.control_stack[self.control_stack.len() - 2].incr);
+                .push(self.return_stack[self.return_stack.len() - 2]);
         }
     }
     fn f_abort(&mut self) {
@@ -369,20 +367,4 @@ impl TF {
     fn f_step_off(&mut self) {
         self.step_mode = false;
     }
-
-    /* fn f_see_word(&mut self) {
-        match &self.token {
-            ForthToken::Forward(forward_info) => {
-                let idx = self.find_definition(forward_info.tail.as_str());
-                match idx {
-                    Some(idx) => self.word_see(idx),
-                    None => {
-                        self.msg
-                            .warning("SEE", "word not found:", Some(forward_info.tail.as_str()))
-                    }
-                }
-            }
-            _ => {}
-        }
-    } */
 }

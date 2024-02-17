@@ -2,13 +2,12 @@
 // Use Reader::get_line() to get a line of text
 // Account for multi-line strings
 
+use crate::engine::OpCode;
 use crate::messages::Msg;
 use crate::reader::Reader;
 //use crate::utility;
 
-const BRANCHES: [&str; 10] = [
-    "if", "else", "then", "begin", "do", "loop", "leave", "until", "repeat", "+loop",
-];
+const BRANCHES: [&str; 5] = ["if", "else", "then", "for", "next"];
 const FORWARDS: [(&str, &str); 7] = [
     ("(", ")"),            // comment
     ("s\"", "\""),         // stored string
@@ -23,10 +22,10 @@ const FORWARDS: [(&str, &str); 7] = [
 pub enum ForthToken {
     Integer(i64),         // the token is an integer, stored here
     Operator(String),     // the token is an operator - either definition or builtin
-    Branch(BranchInfo),   // branch
+    Jump(String, usize),  // branch
     Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
-    Definition(String, Vec<ForthToken>),
-    Builtin(String, u8), // the u8 is a future op code for the builtin, to replace string search
+    Definition(String, Vec<OpCode>),
+    Builtin(String, usize), // the u8 is a future op code for the builtin, to replace string search
     Variable(String, i64),
     Constant(String, i64),
     Float(f64), // a floating point number
@@ -42,23 +41,6 @@ pub struct ForwardInfo {
 impl ForwardInfo {
     pub fn new(word: String, tail: String) -> ForwardInfo {
         ForwardInfo { word, tail }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BranchInfo {
-    pub word: String,     // word name
-    pub offset: usize,    // branch distance
-    pub branch_id: usize, // word-specific DO uses it to keep it's personal handle
-}
-
-impl BranchInfo {
-    pub fn new(word: String, offset: usize, branch_id: usize) -> BranchInfo {
-        BranchInfo {
-            word,
-            offset,
-            branch_id,
-        }
     }
 }
 
@@ -103,11 +85,7 @@ impl Tokenizer {
                     Some(ForthToken::Float(text.parse().unwrap()))
                 } else if BRANCHES.contains(&text.as_str()) {
                     self.branch_counter += 1;
-                    Some(ForthToken::Branch(BranchInfo::new(
-                        text,
-                        0,
-                        self.branch_counter,
-                    )))
+                    Some(ForthToken::Jump(text, 0))
                 } else {
                     // it's a Forward or an Operator
                     for (word, terminator) in FORWARDS {
