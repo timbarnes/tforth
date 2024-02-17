@@ -30,13 +30,6 @@
 
 
 ( Application functions )
-: fac ( n -- n! )   \ Calculates factorial of a non-negative integer. No checks for stack or calculation overflow.
-    dup 
-        if 
-            1 swap _fac 
-        else 
-            drop 1 
-        then ;
 
 : _fac ( r n -- r )   \ Helper function that does most of the work.
     dup if 
@@ -44,5 +37,13 @@
     else 
         drop 
     then ;
+
+: fac ( n -- n! )   \ Calculates factorial of a non-negative integer. No checks for stack or calculation overflow.
+    dup 
+        if 
+            1 swap _fac 
+        else 
+            drop 1 
+        then ;
 
 ." Library loaded."

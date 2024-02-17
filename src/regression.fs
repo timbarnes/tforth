@@ -17,7 +17,7 @@ variable test-num 0 test-num !
 : test-none ( .. -- ) stack-depth 1 test-num +!
     0= if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
 
-: test-single ( m n.. -- b ) ( 1 test-num +! )
+: test-single ( m n.. -- b ) 1 test-num +!
     = if test-num ? ."  Passed" else ."    Failed"  test-num @ then  ;
 
 : test-dual ( j k n.. -- b ) 1 test-num +!
@@ -27,27 +27,15 @@ variable test-num 0 test-num !
 
 : test-results stack-depth 0= if ." All tests passed!" else ." The following tests failed: " .s clear then ;
 
-: loop-test do i loop ;
+: loop-test for i next ;
 : nested-loop-test 
-    do 
-        6 4 do 
+    for 
+        6 for 
             i . j .
-            loop i . 
+            next i . 
         i 
-    loop ;
+    next ;
 
-: loop+test do i dup dup . +loop ;
-
-: leave-test 
-    do 
-        i dup 
-        if 
-            ." inner" 
-        else 
-            ." leaving" leave 
-        then 
-            i . 
-    loop ;
 
 ."         Clear has to be the first test"
 1 2 3 4 5 clear test-none
@@ -69,7 +57,7 @@ variable test-num 0 test-num !
 1 1 45 emit test-single
 
 ."                Loop tests"
-0 21 7 0 loop-test + + + + + test-dual
+0 21 7 loop-test + + + + + test-dual
 1 6 4 1 nested-loop-test * test-dual
 1 -2 1 loop-test test-single
 3 15 7 3 loop-test + + test-dual
