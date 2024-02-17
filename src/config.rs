@@ -81,7 +81,7 @@ impl Config {
         // return when finished
 
         let mut forth = TF::new("Ok ", ">  ");
-        forth.add_builtins();
+        forth.cold_start();
 
         forth.msg.set_level(self.debug_level.clone());
 

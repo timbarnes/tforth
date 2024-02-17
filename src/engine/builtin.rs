@@ -103,6 +103,11 @@ impl TF {
         self.add("debuglevel", TF::f_debuglevel);
         self.add("step-on", TF::f_step_on);
         self.add("step-off", TF::f_step_off);
+        self.add(">r", TF::f_to_r);
+        self.add("r>", TF::f_r_from);
+        self.add("r@", TF::f_r_get);
+        self.add("[", TF::f_lbracket);
+        self.add("]", TF::f_rbracket);
     }
 
     fn f_plus(&mut self) {
@@ -176,7 +181,7 @@ impl TF {
         self.stack.clear()
     }
     fn f_colon(&mut self) {
-        self.compile_mode = true;
+        self.set_compile_mode(true);
     }
     fn f_bye(&mut self) {
         self.set_exit_flag();
@@ -216,7 +221,7 @@ impl TF {
     }
     fn f_over(&mut self) {
         if self.stack_underflow("OVER", 2) {
-            self.abort_flag = true;
+            self.set_abort_flag(true);
         } else {
             let item = self.stack.get(self.stack.len() - 2);
             match item {
@@ -224,14 +229,14 @@ impl TF {
                     self.stack.push(*item);
                 }
                 None => {
-                    self.abort_flag = true;
+                    self.set_abort_flag(true);
                 }
             }
         }
     }
     fn f_rot(&mut self) {
         if self.stack_underflow("ROT", 3) {
-            self.abort_flag = true;
+            self.set_abort_flag(true);
         } else {
             let top_index = self.stack.len() - 1;
             let top = self.stack[top_index - 2];
@@ -259,34 +264,33 @@ impl TF {
     fn f_get(&mut self) {
         if !self.stack_underflow("@", 1) {
             if let Some(adr) = self.stack.pop() {
-                let address = adr.max(0) as usize;
-                if address < self.dictionary.len() {
-                    match &self.dictionary[address] {
-                        ForthToken::Variable(_n, value) => {
-                            self.stack.push(*value as i64);
-                        }
-                        _ => {}
-                    }
-                }
+                let value = self.var_get(adr as usize);
+                self.stack.push(value as i64);
             }
         }
     }
     fn f_store(&mut self) {
         if !self.stack_underflow("!", 2) {
             if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
-                let address = addr.max(0) as usize;
-                if address < self.dictionary.len() {
-                    match &self.dictionary[address as usize] {
-                        ForthToken::Variable(name, _v) => {
-                            self.dictionary[address] = ForthToken::Variable(name.to_owned(), val);
-                        }
-                        _ => {}
-                    }
-                }
+                self.var_set(addr as usize, val);
             }
         }
     }
-
+    fn f_to_r(&mut self) {
+        pop1!(self, ">r", |n| self.return_stack.push(n));
+    }
+    fn f_r_from(&mut self) {
+        if let Some(n) = self.return_stack.pop() {
+            self.stack.push(n);
+        } else {
+            self.msg.error("r>", "Return stack underflow", None::<bool>);
+        }
+    }
+    fn f_r_get(&mut self) {
+        if self.return_stack.len() > 0 {
+            self.stack.push(*self.return_stack.last().unwrap());
+        }
+    }
     fn f_i(&mut self) {
         // print the index of the current top-level loop
         if self.return_stack.is_empty() {
@@ -313,13 +317,20 @@ impl TF {
                 .push(self.return_stack[self.return_stack.len() - 2]);
         }
     }
+    fn f_lbracket(&mut self) {
+        self.set_compile_mode(false);
+    }
+    fn f_rbracket(&mut self) {
+        self.set_compile_mode(true);
+    }
     fn f_abort(&mut self) {
         // empty the stack, reset any pending operations, and return to the prompt
         self.msg
             .warning("ABORT", "Terminating execution", None::<bool>);
         self.stack.clear();
+        self.return_stack.clear();
         self.parser.clear();
-        self.abort_flag = true;
+        self.set_abort_flag(true);
     }
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
@@ -366,5 +377,55 @@ impl TF {
     }
     fn f_step_off(&mut self) {
         self.step_mode = false;
+    }
+
+    /// ADD SYSTEM VARIABLES
+
+    pub fn add_variables(&mut self) {
+        self.pc_ptr = self.add_variable("pc", 0); // program counter
+        self.compile_ptr = self.add_variable("compile?", 0); // compile mode
+        self.abort_ptr = self.add_variable("abort?", 0); // abort flag
+    }
+
+    fn add_variable(&mut self, name: &str, val: i64) -> usize {
+        self.dictionary
+            .push(ForthToken::Variable(name.to_owned(), val));
+        self.dictionary.len() - 1
+    }
+
+    pub fn var_set(&mut self, addr: usize, new_val: i64) {
+        // set the variable at addr to val
+        let address = addr.max(0) as usize;
+        if address < self.dictionary.len() {
+            let var = &self.dictionary[addr];
+            match var {
+                ForthToken::Variable(name, v) => {
+                    self.dictionary[addr] = ForthToken::Variable(name.to_owned(), new_val)
+                }
+                _ => self
+                    .msg
+                    .error("sysvar_set", "Does not point to variable", Some(addr)),
+            }
+        }
+    }
+
+    pub fn var_get(&mut self, addr: usize) -> i64 {
+        // gets the current value of the variable at addr
+        let address = addr.max(0) as usize;
+        if address < self.dictionary.len() {
+            let var = &self.dictionary[addr];
+            match var {
+                ForthToken::Variable(_, value) => *value,
+                _ => {
+                    self.msg
+                        .error("sysvar-get", "Does not point to variable", Some(addr));
+                    self.set_abort_flag(true);
+                    0
+                }
+            }
+        } else {
+            self.set_abort_flag(true);
+            0
+        }
     }
 }

@@ -31,6 +31,7 @@ impl ControlFrame {
 pub enum OpCode {
     // used in compiled definitions to reference objects
     B(usize),        // builtin
+    D(String),       // a definition's header
     Lparen(String),  // paren (comment)
     Jif(usize),      // if (branch)
     Jelse(usize),    // else (branch)
@@ -38,8 +39,8 @@ pub enum OpCode {
     Jfor(usize),     // for (branch)
     Jnext(usize),    // next (branch)
     W(usize),        // defined word
-    V(usize),        // variable
-    C(usize),        // constant
+    V(usize),        // variable reference
+    C(usize),        // constant reference
     L(i64),          // literal
     F(f64),          // float literal
     Lstring(String), // an inline string
@@ -58,8 +59,9 @@ pub struct TF {
     builtin_doc: HashMap<String, String>, // doc strings for built-in words
     text: String,                    // the current s".."" string
     file_mode: FileMode,
-    compile_mode: bool, // true if compiling a word
-    abort_flag: bool,   // true if abort has been called
+    compile_ptr: usize, // true if compiling a word
+    pc_ptr: usize,      // program counter
+    abort_ptr: usize,   // true if abort has been called
     exit_flag: bool,    // set when the "bye" word is executed.
     pub msg: Msg,
     parser: Tokenizer,
@@ -96,8 +98,9 @@ impl TF {
                 return_stack: Vec::new(),
                 builtin_doc: doc_strings,
                 file_mode: FileMode::Unset,
-                compile_mode: false,
-                abort_flag: false,
+                compile_ptr: 0,
+                pc_ptr: 0,
+                abort_ptr: 0,
                 exit_flag: false,
                 msg: Msg::new(),
                 parser,
@@ -112,8 +115,33 @@ impl TF {
         }
     }
 
+    pub fn cold_start(&mut self) {
+        self.add_builtins();
+        self.add_variables();
+    }
+
+    fn get_compile_mode(&mut self) -> bool {
+        if self.var_get(self.compile_ptr) == 0 {
+            false
+        } else {
+            true
+        }
+    }
+
+    fn set_compile_mode(&mut self, value: bool) {
+        self.var_set(self.compile_ptr, if value { -1 } else { 0 });
+    }
+
     pub fn set_abort_flag(&mut self, v: bool) {
-        self.abort_flag = v;
+        self.var_set(self.abort_ptr, if v { -1 } else { 0 });
+    }
+
+    pub fn get_abort_flag(&mut self) -> bool {
+        if self.var_get(self.abort_ptr) == 0 {
+            false
+        } else {
+            true
+        }
     }
 
     fn set_exit_flag(&mut self) {
@@ -196,7 +224,7 @@ impl TF {
                     _ => {}
                 }
                 // Any valid token
-                if self.compile_mode {
+                if self.get_compile_mode() {
                     self.compile_token();
                 } else {
                     // we're in immediate mode
@@ -225,7 +253,7 @@ impl TF {
                     ));
                     self.new_word_name.clear();
                     self.new_word_definition.clear();
-                    self.compile_mode = false;
+                    self.set_compile_mode(false);
                 } else if self.new_word_name.is_empty() {
                     // We've found the word name
                     self.new_word_name = tstring.to_string();
@@ -403,11 +431,11 @@ impl TF {
                         match definition {
                             ForthToken::Definition(_n, code) => {
                                 while program_counter < code.len() {
-                                    if self.abort_flag {
+                                    if self.get_abort_flag() {
                                         // code.clear();
                                         self.stack.clear();
                                         self.return_stack.clear();
-                                        self.abort_flag = false;
+                                        self.set_abort_flag(false);
                                         break;
                                     } else {
                                         (program_counter, jumped) = self.execute_opcode(
@@ -539,7 +567,7 @@ impl TF {
                         true
                     }
                     None => {
-                        self.abort_flag = true;
+                        self.set_abort_flag(true);
                         self.msg
                             .error("loaded", "Failed to create new reader", None::<bool>);
                         false
@@ -549,7 +577,7 @@ impl TF {
             Err(error) => {
                 self.msg
                     .warning("loaded", error.to_string().as_str(), None::<bool>);
-                self.abort_flag = true;
+                self.set_abort_flag(true);
                 false
             }
         }
@@ -627,12 +655,20 @@ impl TF {
                     match word {
                         OpCode::F(f) => print!("f{} ", f),
                         OpCode::B(idx) => print!("{} ", &self.builtins[*idx].name),
-                        OpCode::W(_idx) => print!("{name} "),
-                        OpCode::Jif(offset) => print!("if "),
-                        OpCode::Jelse(offset) => print!("else "),
-                        OpCode::Jthen(offset) => print!("then "),
-                        OpCode::Jfor(offset) => print!("for "),
-                        OpCode::Jnext(offset) => print!("next "),
+                        OpCode::W(idx) => {
+                            let token = &self.dictionary[*idx];
+                            match token {
+                                ForthToken::Definition(name, _code) => {
+                                    print!("{} ", name);
+                                }
+                                _ => {}
+                            }
+                        }
+                        OpCode::Jif(_offset) => print!("if "),
+                        OpCode::Jelse(_offset) => print!("else "),
+                        OpCode::Jthen(_offset) => print!("then "),
+                        OpCode::Jfor(_offset) => print!("for "),
+                        OpCode::Jnext(_offset) => print!("next "),
                         OpCode::Lstring(info) => print!(".\" {info} "),
                         OpCode::Lparen(txt) => print!("({} ", txt),
                         OpCode::L(n) => print!("{n} "),
@@ -647,6 +683,7 @@ impl TF {
                             }
                         }
                         OpCode::Noop => print!("Noop "),
+                        OpCode::D(name) => print!("!!Definition not implemented"),
                     }
                 }
                 println!(";");
