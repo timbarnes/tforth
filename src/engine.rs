@@ -38,15 +38,15 @@ pub struct TF {
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
     return_stack: Vec<i64>,          // for do loops etc.
-    text_pad: String,                // the current s".."" string
+    pad_ptr: usize,                  // the current s".."" string
     file_mode: FileMode,
     compile_ptr: usize, // true if compiling a word
     pc_ptr: usize,      // program counter
     abort_ptr: usize,   // true if abort has been called
+    tib_ptr: usize,     // TIB
     tib_size_ptr: usize,
     tib_in_ptr: usize,
-    exit_flag: bool,    // set when the "bye" word is executed.
-    text_input: String, // TIB
+    exit_flag: bool, // set when the "bye" word is executed.
     pub msg: Msg,
     parser: Tokenizer,
     new_word_name: String,
@@ -73,18 +73,18 @@ impl TF {
                 stack: Vec::new(),
                 dictionary: Vec::new(),
                 builtins: Vec::new(),
-                text_pad: String::new(),
                 defined_variables: HashMap::new(),
                 defined_constants: HashMap::new(),
                 return_stack: Vec::new(),
+                pad_ptr: 0,
                 file_mode: FileMode::Unset,
                 compile_ptr: 0,
                 pc_ptr: 0,
                 abort_ptr: 0,
+                tib_ptr: 0,
                 tib_size_ptr: 0,
                 tib_in_ptr: 0,
                 exit_flag: false,
-                text_input: String::new(),
                 msg: Msg::new(),
                 parser,
                 new_word_name: String::new(),
@@ -104,21 +104,21 @@ impl TF {
     }
 
     fn get_compile_mode(&mut self) -> bool {
-        if self.var_get(self.compile_ptr) == 0 {
+        if self.get_var(self.compile_ptr) == 0 {
             false
         } else {
             true
         }
     }
     fn set_compile_mode(&mut self, value: bool) {
-        self.var_set(self.compile_ptr, if value { -1 } else { 0 });
+        self.set_var(self.compile_ptr, if value { -1 } else { 0 });
     }
 
     pub fn set_abort_flag(&mut self, v: bool) {
-        self.var_set(self.abort_ptr, if v { -1 } else { 0 });
+        self.set_var(self.abort_ptr, if v { -1 } else { 0 });
     }
     pub fn get_abort_flag(&mut self) -> bool {
-        if self.var_get(self.abort_ptr) == 0 {
+        if self.get_var(self.abort_ptr) == 0 {
             false
         } else {
             true
@@ -126,18 +126,18 @@ impl TF {
     }
 
     fn set_program_counter(&mut self, val: usize) {
-        self.var_set(self.pc_ptr, val as i64);
+        self.set_var(self.pc_ptr, val as i64);
     }
     fn get_program_counter(&mut self) -> usize {
-        self.var_get(self.pc_ptr) as usize
+        self.get_var(self.pc_ptr) as usize
     }
     fn increment_program_counter(&mut self, val: usize) {
         let new = self.get_program_counter() + val;
-        self.var_set(self.pc_ptr, (new) as i64);
+        self.set_var(self.pc_ptr, (new) as i64);
     }
     fn decrement_program_counter(&mut self, val: usize) {
         let new = self.get_program_counter() - val;
-        self.var_set(self.pc_ptr, (new) as i64);
+        self.set_var(self.pc_ptr, (new) as i64);
     }
 
     fn set_exit_flag(&mut self) {
@@ -348,12 +348,12 @@ impl TF {
                 match info.word.as_str() {
                     "(" => {} // ignore comments
                     ".\"" => {
-                        let tail = &info.tail[1..info.tail.len() - 1];
+                        let tail = info.tail[1..info.tail.len() - 1].to_string();
                         print!("{}", tail);
                     }
                     "s\"" => {
-                        let txt = &info.tail;
-                        self.text_pad = info.tail[1..txt.len() - 1].to_owned();
+                        let tail: String = info.tail[1..info.tail.len() - 1].to_owned();
+                        self.set_string_var(self.pad_ptr, tail.as_str());
                     }
                     "variable" => {
                         // add it to the dictionary
@@ -405,6 +405,9 @@ impl TF {
             ForthToken::Definition(_name, _def) => self.execute_definition(),
             ForthToken::Builtin(_name, code) => self.execute_builtin(*code),
             ForthToken::Variable(_name, _val) => {
+                self.stack.push(self.token_ptr.0 as i64);
+            }
+            ForthToken::StringVar(_name, _val) => {
                 self.stack.push(self.token_ptr.0 as i64);
             }
             _ => {}
@@ -561,7 +564,8 @@ impl TF {
     fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
-        self.load_file(&self.text_pad.clone());
+        let file_name = self.get_string_var(self.pad_ptr);
+        self.load_file(&file_name);
     }
 
     fn f_constant(&self, idx: usize) -> i64 {
@@ -574,7 +578,10 @@ impl TF {
     fn find_definition(&self, name: &str) -> Option<usize> {
         for i in (0..self.dictionary.len()).rev() {
             match &self.dictionary[i] {
-                ForthToken::Definition(n, _) | ForthToken::Variable(n, _) => {
+                ForthToken::Definition(n, _)
+                | ForthToken::Variable(n, _)
+                | ForthToken::StringVar(n, _)
+                | ForthToken::Constant(n, _) => {
                     //println!("{}:{}", i, n);
                     if n == name {
                         return Some(i);
@@ -659,6 +666,7 @@ impl TF {
             }
             ForthToken::Variable(name, val) => println!("V {name} = {val} "),
             ForthToken::Constant(name, val) => println!("C {name} = {val} "),
+            ForthToken::StringVar(name, val) => println!("S {name} = <{val}> "),
             _ => {}
         }
     }

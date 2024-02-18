@@ -28,8 +28,9 @@ pub enum ForthToken {
     Builtin(String, usize), // the u8 is a future op code for the builtin, to replace string search
     Variable(String, i64),
     Constant(String, i64),
-    Float(f64), // a floating point number
-    Empty,      // the line was empty
+    StringVar(String, String), // a text string variable
+    Float(f64),                // a floating point number
+    Empty,                     // the line was empty
 }
 
 #[derive(Debug, Clone)]

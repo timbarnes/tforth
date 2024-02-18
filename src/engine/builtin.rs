@@ -6,6 +6,7 @@
 use crate::engine::{FileMode, TF};
 use crate::messages::DebugLevel;
 use crate::tokenizer::ForthToken;
+use std::cmp::min;
 use std::io::{self, Write};
 
 pub trait BuiltinCall {
@@ -93,12 +94,24 @@ impl TF {
         self.add("show-stack", TF::f_show_stack, "");
         self.add("hide-stack", TF::f_hide_stack, "");
         self.add(".s\"", TF::f_dot_s_quote, "");
-        self.add("emit", TF::f_emit, "");
-        self.add("flush", TF::f_flush, "");
-        self.add("clear", TF::f_clear, "");
-        self.add(":", TF::f_colon, "");
-        self.add("bye", TF::f_bye, "");
-        self.add("words", TF::f_words, "");
+        self.add(
+            "emit",
+            TF::f_emit,
+            "emit: ( c -- ) if printable, sends character c to the terminal",
+        );
+        self.add(
+            "flush",
+            TF::f_flush,
+            "flush: forces pending output to appear on the terminal",
+        );
+        self.add("clear", TF::f_clear, "clear: resets the stack to empty");
+        self.add(":", TF::f_colon, ": starts a new definition");
+        self.add("bye", TF::f_bye, "bye: exits to the operating system");
+        self.add(
+            "words",
+            TF::f_words,
+            "words: Lists all defined words to the terminal",
+        );
         self.add("dup", TF::f_dup, "");
         self.add("drop", TF::f_drop, "");
         self.add("swap", TF::f_swap, "");
@@ -106,13 +119,21 @@ impl TF {
         self.add("rot", TF::f_rot, "");
         self.add("and", TF::f_and, "");
         self.add("or", TF::f_or, "");
-        self.add("@", TF::f_get, "");
-        self.add("!", TF::f_store, "");
-        self.add("i", TF::f_i, "");
-        self.add("j", TF::f_j, "");
+        self.add("@", TF::f_get, "@: ( a -- v ) Pushes variable a's value");
+        self.add("!", TF::f_store, "!: ( v a -- ) stores v at address a");
+        self.add("i", TF::f_i, "Pushes the current FOR - NEXT loop index");
+        self.add("j", TF::f_j, "Pushes the second-level (outer) loop index");
         self.add("abort", TF::f_abort, "");
-        self.add("see-all", TF::f_see_all, "");
-        self.add("depth", TF::f_stack_depth, "");
+        self.add(
+            "see-all",
+            TF::f_see_all,
+            "see-all: Prints the definitions of known words",
+        );
+        self.add(
+            "depth",
+            TF::f_stack_depth,
+            "depth: Pushes the current stack depth",
+        );
         self.add("key", TF::f_key, "");
         self.add("r/w", TF::f_r_w, "");
         self.add("r/o", TF::f_r_o, "");
@@ -127,8 +148,18 @@ impl TF {
         self.add("[", TF::f_lbracket, "");
         self.add("]", TF::f_rbracket, "");
         self.add("quit", TF::f_quit, "");
+        self.add(
+            "interpret",
+            TF::f_interpret,
+            "interpret: Interprets one line of Forth",
+        );
         self.add("accept", TF::f_accept, "");
         self.add("text", TF::f_text, "");
+        self.add(
+            "type",
+            TF::f_type,
+            "type: print a string using pointer on stack",
+        );
     }
 
     fn f_plus(&mut self) {
@@ -180,7 +211,7 @@ impl TF {
         self.show_stack = false;
     }
     fn f_dot_s_quote(&mut self) {
-        print!("{:?}", self.text_pad);
+        print!("{:?}", self.pad_ptr);
     }
     fn f_emit(&mut self) {
         match self.stack.pop() {
@@ -284,7 +315,7 @@ impl TF {
     fn f_get(&mut self) {
         if !self.stack_underflow("@", 1) {
             if let Some(adr) = self.stack.pop() {
-                let value = self.var_get(adr as usize);
+                let value = self.get_var(adr as usize);
                 self.stack.push(value as i64);
             }
         }
@@ -292,7 +323,7 @@ impl TF {
     fn f_store(&mut self) {
         if !self.stack_underflow("!", 2) {
             if let (Some(addr), Some(val)) = (self.stack.pop(), self.stack.pop()) {
-                self.var_set(addr as usize, val);
+                self.set_var(addr as usize, val);
             }
         }
     }
@@ -356,6 +387,29 @@ impl TF {
         self.return_stack.clear();
         self.set_program_counter(0);
         self.f_abort();
+        loop {
+            if self.should_exit() {
+                break;
+            } else {
+                self.stack.push(132);
+                self.f_accept(); // get a line from the terminal
+                self.f_interpret(); // interpret the contents of the line
+                println!("ok");
+            }
+        }
+    }
+    fn f_interpret(&mut self) {
+        // process a line of tokens
+        loop {
+            if self.get_var(self.tib_in_ptr) >= self.get_var(self.tib_size_ptr) {
+                // no more tokens on this line
+                return;
+            } else {
+                self.stack.push(' ' as i64);
+                self.f_text();
+                // INTERPRET needs the address on the stack
+            }
+        }
     }
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
@@ -407,8 +461,10 @@ impl TF {
         self.pc_ptr = self.add_variable("pc", 0); // program counter
         self.compile_ptr = self.add_variable("compile?", 0); // compile mode
         self.abort_ptr = self.add_variable("abort?", 0); // abort flag
+        self.tib_ptr = self.add_string_var("tib", "");
         self.tib_size_ptr = self.add_variable("#tib", 0); // length of text input buffer
         self.tib_in_ptr = self.add_variable(">in", 0); // current position in input buffer
+        self.pad_ptr = self.add_string_var("pad", "");
     }
 
     fn add_variable(&mut self, name: &str, val: i64) -> usize {
@@ -417,7 +473,13 @@ impl TF {
         self.dictionary.len() - 1
     }
 
-    pub fn var_set(&mut self, addr: usize, new_val: i64) {
+    fn add_string_var(&mut self, name: &str, val: &str) -> usize {
+        self.dictionary
+            .push(ForthToken::StringVar(name.to_owned(), val.to_owned()));
+        self.dictionary.len() - 1
+    }
+
+    pub fn set_var(&mut self, addr: usize, new_val: i64) {
         // set the variable at addr to val
         let address = addr.max(0) as usize;
         if address < self.dictionary.len() {
@@ -433,7 +495,7 @@ impl TF {
         }
     }
 
-    pub fn var_get(&mut self, addr: usize) -> i64 {
+    pub fn get_var(&mut self, addr: usize) -> i64 {
         // gets the current value of the variable at addr
         let address = addr.max(0) as usize;
         if address < self.dictionary.len() {
@@ -453,19 +515,53 @@ impl TF {
         }
     }
 
+    pub fn get_string_var(&mut self, addr: usize) -> String {
+        // gets the current value of the variable at addr
+        let address = addr.max(0) as usize;
+        if address < self.dictionary.len() {
+            let var = &self.dictionary[addr];
+            match var {
+                ForthToken::StringVar(_, value) => value.clone(),
+                _ => {
+                    self.msg
+                        .error("stringvar-get", "Does not point to variable", Some(addr));
+                    self.set_abort_flag(true);
+                    "".to_string()
+                }
+            }
+        } else {
+            self.set_abort_flag(true);
+            "".to_string()
+        }
+    }
+
+    pub fn set_string_var(&mut self, addr: usize, new_val: &str) {
+        // set the variable at addr to val
+        let address = addr.max(0) as usize;
+        if address < self.dictionary.len() {
+            let var = &self.dictionary[addr];
+            match var {
+                ForthToken::StringVar(name, _v) => {
+                    let name = name.clone();
+                    self.dictionary[addr] = ForthToken::StringVar(name, new_val.to_string())
+                }
+                _ => self
+                    .msg
+                    .error("stringvar_set", "Does not point to variable", Some(addr)),
+            }
+        }
+    }
+
     fn f_accept(&mut self) {
         // get a new line of input and initialize the pointer variable
         match self.stack.pop() {
             Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
                 Some(mut line) => {
-                    let max = max_len as usize;
-                    if line.len() > max {
-                        line = line[..max].to_string();
-                    }
-                    self.text_input = line;
-                    let length = self.text_input.len();
-                    self.var_set(self.tib_in_ptr, 0);
-                    self.var_set(self.tib_size_ptr, length as i64);
+                    let length = min(line.len() - 1, max_len as usize) as usize;
+                    line = line[..length].to_owned();
+                    self.set_string_var(self.tib_ptr, &line);
+                    self.set_var(self.tib_in_ptr, 0);
+                    self.set_var(self.tib_size_ptr, length as i64);
                 }
                 None => {
                     self.msg
@@ -486,26 +582,41 @@ impl TF {
         match self.stack.pop() {
             Some(d) => {
                 let delim = d as u8;
-                let in_p = self.var_get(self.tib_in_ptr);
+                let in_p = self.get_var(self.tib_in_ptr);
                 let mut i = in_p as usize;
                 let mut j = i;
+                let line = &self.get_string_var(self.tib_ptr);
                 if delim as u8 == 1 {
-                    // get the rest of the line
-                    j = self.text_input.len();
+                    // get the rest of the line by setting j to the end
+                    j = self.get_var(self.tib_size_ptr) as usize;
                 } else {
-                    while i < self.text_input.len() && self.text_input.as_bytes()[i] == delim {
+                    while i < line.len() && line.as_bytes()[i] == delim {
                         // skip leading delims
                         i += 1;
                     }
                     j = i;
-                    while j < self.text_input.len() && self.text_input.as_bytes()[j] != delim {
+                    while j < line.len() && line.as_bytes()[j] != delim {
                         j += 1;
                     }
                 }
-                self.var_set(self.tib_in_ptr, j as i64);
-                self.text_pad = self.text_input[i..j - 1].to_owned(); // does not include j!
+                self.set_var(self.tib_in_ptr, j as i64);
+                let token = line[i..j].to_owned(); // does not include j!
+                self.set_string_var(self.pad_ptr, token.as_str());
             }
-            None => {} // stack was empty! error
+            None => self
+                .msg
+                .error("TEXT", "No delimiter on stack", None::<bool>), // stack was empty! error
+        }
+    }
+
+    fn f_type(&mut self) {
+        // print a string, found via pointer on stack
+        match self.stack.pop() {
+            Some(addr) => {
+                let text = self.get_string_var(addr as usize);
+                print!("{text}");
+            }
+            None => {}
         }
     }
 }
