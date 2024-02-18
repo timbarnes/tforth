@@ -47,7 +47,6 @@ impl ForwardInfo {
 #[derive(Debug)]
 pub struct Tokenizer {
     line: String,
-    token_string: String,
     pub reader: Reader,
     branch_counter: usize,
     msg: Msg,
@@ -57,16 +56,10 @@ impl Tokenizer {
     pub fn new(reader: Reader) -> Tokenizer {
         Tokenizer {
             line: String::new(),
-            token_string: String::new(),
             reader,
             branch_counter: 0,
             msg: Msg::new(),
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.line.clear();
-        self.token_string.clear();
     }
 
     pub fn get_token(&mut self, current_stack: &String) -> Option<ForthToken> {
@@ -170,7 +163,7 @@ impl Tokenizer {
                 }
             }
         }
-        self.line = self.line.trim_start().to_string(); // We never need leading spaced.
+        self.line = self.line.trim_start().to_string(); // We never need leading spaces.
         for c in self.line.chars() {
             match c {
                 '\n' | '\t' | ' ' => {

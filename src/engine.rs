@@ -5,28 +5,11 @@ mod builtin;
 use std::collections::HashMap;
 use std::io::{self, Write};
 
-use crate::doc;
 use crate::messages::Msg;
 use crate::reader::Reader;
 use crate::tokenizer::{ForthToken, Tokenizer};
 use builtin::BuiltInFn;
 
-#[derive(Debug)]
-struct ControlFrame {
-    id: usize,
-    incr: i64,
-    end: i64,
-}
-
-impl ControlFrame {
-    fn new(id: usize, start: i64, end: i64) -> ControlFrame {
-        ControlFrame {
-            id,
-            incr: start,
-            end,
-        }
-    }
-}
 #[derive(Clone, Debug)]
 pub enum OpCode {
     // used in compiled definitions to reference objects
@@ -52,17 +35,18 @@ pub struct TF {
     pub stack: Vec<i64>,             // the numeric stack, currently integers
     pub dictionary: Vec<ForthToken>, // the dictionary: keys (words) and their definitions
     pub builtins: Vec<BuiltInFn>,    // the dictionary of builtins
-    pub variable_stack: Vec<i64>,    // where variables are stored
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
     return_stack: Vec<i64>,          // for do loops etc.
-    builtin_doc: HashMap<String, String>, // doc strings for built-in words
-    text: String,                    // the current s".."" string
+    text_pad: String,                // the current s".."" string
     file_mode: FileMode,
     compile_ptr: usize, // true if compiling a word
     pc_ptr: usize,      // program counter
     abort_ptr: usize,   // true if abort has been called
+    tib_size_ptr: usize,
+    tib_in_ptr: usize,
     exit_flag: bool,    // set when the "bye" word is executed.
+    text_input: String, // TIB
     pub msg: Msg,
     parser: Tokenizer,
     new_word_name: String,
@@ -83,25 +67,24 @@ pub enum FileMode {
 impl TF {
     // ForthInterpreter struct implementations
     pub fn new(main_prompt: &str, multiline_prompt: &str) -> TF {
-        let doc_strings = doc::build_doc_strings();
         if let Some(reader) = Reader::new(None, main_prompt, multiline_prompt, Msg::new()) {
             let parser = Tokenizer::new(reader);
             TF {
                 stack: Vec::new(),
                 dictionary: Vec::new(),
                 builtins: Vec::new(),
-                text: String::new(),
-                variable_stack: Vec::new(),
-                // constant_stack: Vec::new(),
+                text_pad: String::new(),
                 defined_variables: HashMap::new(),
                 defined_constants: HashMap::new(),
                 return_stack: Vec::new(),
-                builtin_doc: doc_strings,
                 file_mode: FileMode::Unset,
                 compile_ptr: 0,
                 pc_ptr: 0,
                 abort_ptr: 0,
+                tib_size_ptr: 0,
+                tib_in_ptr: 0,
                 exit_flag: false,
+                text_input: String::new(),
                 msg: Msg::new(),
                 parser,
                 new_word_name: String::new(),
@@ -370,7 +353,7 @@ impl TF {
                     }
                     "s\"" => {
                         let txt = &info.tail;
-                        self.text = info.tail[1..txt.len() - 1].to_owned();
+                        self.text_pad = info.tail[1..txt.len() - 1].to_owned();
                     }
                     "variable" => {
                         // add it to the dictionary
@@ -602,7 +585,7 @@ impl TF {
     fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
-        self.load_file(&self.text.clone());
+        self.load_file(&self.text_pad.clone());
     }
 
     fn f_constant(&self, idx: usize) -> i64 {
@@ -655,12 +638,6 @@ impl TF {
         None
     }
 
-    fn variable_see(&self, name: &str, index: i64) {
-        let idx = index.max(0) as usize;
-        let value = self.variable_stack[idx];
-        println!("Variable {name}: {value}");
-    }
-
     fn word_see(&self, index: usize) {
         // soon adding variables and constants
         let token = &self.dictionary[index];
@@ -704,8 +681,8 @@ impl TF {
                 }
                 println!(";");
             }
-            ForthToken::Variable(name, val) => print!("V {name}={val} "),
-            ForthToken::Constant(name, val) => print!("C {name}={val} "),
+            ForthToken::Variable(name, val) => println!("V {name} = {val} "),
+            ForthToken::Constant(name, val) => println!("C {name} = {val} "),
             _ => {}
         }
     }

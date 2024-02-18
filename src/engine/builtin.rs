@@ -15,6 +15,7 @@ pub trait BuiltinCall {
 pub struct BuiltInFn {
     pub name: String,
     pub code: for<'a> fn(&'a mut TF),
+    pub doc: String,
 }
 
 impl BuiltinCall for BuiltInFn {
@@ -22,8 +23,8 @@ impl BuiltinCall for BuiltInFn {
 }
 
 impl BuiltInFn {
-    pub fn new(name: String, code: for<'a> fn(&'a mut TF)) -> BuiltInFn {
-        BuiltInFn { name, code }
+    pub fn new(name: String, code: for<'a> fn(&'a mut TF), doc: String) -> BuiltInFn {
+        BuiltInFn { name, code, doc }
     }
 }
 
@@ -52,62 +53,82 @@ macro_rules! pop1 {
 }
 
 impl TF {
-    fn add(&mut self, name: &str, code: for<'a> fn(&'a mut TF)) {
-        self.builtins.push(BuiltInFn::new(name.to_owned(), code));
+    fn add(&mut self, name: &str, code: for<'a> fn(&'a mut TF), doc: &str) {
+        self.builtins
+            .push(BuiltInFn::new(name.to_owned(), code, doc.to_string()));
     }
 
     pub fn add_builtins(&mut self) {
         // add the builtins to the builtin dictionary
-        self.add("+", TF::f_plus);
-        self.add("-", TF::f_minus);
-        self.add("*", TF::f_times);
-        self.add("/", TF::f_divide);
-        self.add("mod", TF::f_mod);
-        self.add("<", TF::f_less);
-        self.add(".", TF::f_dot);
-        self.add("true", TF::f_true);
-        self.add("false", TF::f_false);
-        self.add("=", TF::f_equal);
-        self.add("0=", TF::f_0equal);
-        self.add("0<", TF::f_0less);
-        self.add(".s", TF::f_dot_s);
-        self.add("cr", TF::f_cr);
-        self.add("show-stack", TF::f_show_stack);
-        self.add("hide-stack", TF::f_hide_stack);
-        self.add(".s\"", TF::f_dot_s_quote);
-        self.add("emit", TF::f_emit);
-        self.add("flush", TF::f_flush);
-        self.add("clear", TF::f_clear);
-        self.add(":", TF::f_colon);
-        self.add("bye", TF::f_bye);
-        self.add("words", TF::f_words);
-        self.add("dup", TF::f_dup);
-        self.add("drop", TF::f_drop);
-        self.add("swap", TF::f_swap);
-        self.add("over", TF::f_over);
-        self.add("rot", TF::f_rot);
-        self.add("and", TF::f_and);
-        self.add("or", TF::f_or);
-        self.add("@", TF::f_get);
-        self.add("!", TF::f_store);
-        self.add("i", TF::f_i);
-        self.add("j", TF::f_j);
-        self.add("abort", TF::f_abort);
-        self.add("see-all", TF::f_see_all);
-        self.add("depth", TF::f_stack_depth);
-        self.add("key", TF::f_key);
-        self.add("r/w", TF::f_r_w);
-        self.add("r/o", TF::f_r_o);
-        self.add("loaded", TF::f_loaded);
-        self.add("dbg", TF::f_dbg);
-        self.add("debuglevel", TF::f_debuglevel);
-        self.add("step-on", TF::f_step_on);
-        self.add("step-off", TF::f_step_off);
-        self.add(">r", TF::f_to_r);
-        self.add("r>", TF::f_r_from);
-        self.add("r@", TF::f_r_get);
-        self.add("[", TF::f_lbracket);
-        self.add("]", TF::f_rbracket);
+        self.add("+", TF::f_plus, "( j k -- j+k ) Push j+k on the stack");
+        self.add("-", TF::f_minus, "( j k -- j+k ) Push j-k on the stack");
+        self.add("*", TF::f_times, "( j k -- j-k ) Push  -k on the stack");
+        self.add("/", TF::f_divide, "( j k -- j/k ) Push j/k on the stack");
+        self.add("mod", TF::f_mod, "( j k -- j/k ) Push j%k on the stack");
+        self.add(
+            "<",
+            TF::f_less,
+            "( j k -- j/k ) If j < k push true else false",
+        );
+        self.add(".", TF::f_dot, "");
+        self.add(
+            "true",
+            TF::f_true,
+            "( -- -1 ) Push the canonical true value on the stack.",
+        );
+        self.add("false", TF::f_false, "");
+        self.add(
+            "=",
+            TF::f_equal,
+            "( j k -- b ) If j == k push true else false",
+        );
+        self.add("0=", TF::f_0equal, "");
+        self.add(
+            "0<",
+            TF::f_0less,
+            "( j k -- j/k ) If j < 0 push true else false",
+        );
+        self.add(".s", TF::f_dot_s, "");
+        self.add("cr", TF::f_cr, "");
+        self.add("show-stack", TF::f_show_stack, "");
+        self.add("hide-stack", TF::f_hide_stack, "");
+        self.add(".s\"", TF::f_dot_s_quote, "");
+        self.add("emit", TF::f_emit, "");
+        self.add("flush", TF::f_flush, "");
+        self.add("clear", TF::f_clear, "");
+        self.add(":", TF::f_colon, "");
+        self.add("bye", TF::f_bye, "");
+        self.add("words", TF::f_words, "");
+        self.add("dup", TF::f_dup, "");
+        self.add("drop", TF::f_drop, "");
+        self.add("swap", TF::f_swap, "");
+        self.add("over", TF::f_over, "");
+        self.add("rot", TF::f_rot, "");
+        self.add("and", TF::f_and, "");
+        self.add("or", TF::f_or, "");
+        self.add("@", TF::f_get, "");
+        self.add("!", TF::f_store, "");
+        self.add("i", TF::f_i, "");
+        self.add("j", TF::f_j, "");
+        self.add("abort", TF::f_abort, "");
+        self.add("see-all", TF::f_see_all, "");
+        self.add("depth", TF::f_stack_depth, "");
+        self.add("key", TF::f_key, "");
+        self.add("r/w", TF::f_r_w, "");
+        self.add("r/o", TF::f_r_o, "");
+        self.add("loaded", TF::f_loaded, "");
+        self.add("dbg", TF::f_dbg, "");
+        self.add("debuglevel", TF::f_debuglevel, "");
+        self.add("step-on", TF::f_step_on, "");
+        self.add("step-off", TF::f_step_off, "");
+        self.add(">r", TF::f_to_r, "");
+        self.add("r>", TF::f_r_from, "");
+        self.add("r@", TF::f_r_get, "");
+        self.add("[", TF::f_lbracket, "");
+        self.add("]", TF::f_rbracket, "");
+        self.add("quit", TF::f_quit, "");
+        self.add("accept", TF::f_accept, "");
+        self.add("text", TF::f_text, "");
     }
 
     fn f_plus(&mut self) {
@@ -159,7 +180,7 @@ impl TF {
         self.show_stack = false;
     }
     fn f_dot_s_quote(&mut self) {
-        print!("{:?}", self.text);
+        print!("{:?}", self.text_pad);
     }
     fn f_emit(&mut self) {
         if !self.stack_underflow("echo", 1) {
@@ -330,16 +351,15 @@ impl TF {
         self.msg
             .warning("ABORT", "Terminating execution", None::<bool>);
         self.stack.clear();
-        self.return_stack.clear();
-        self.parser.clear();
         self.set_abort_flag(true);
+    }
+    fn f_quit(&mut self) {
+        self.return_stack.clear();
+        self.f_abort();
     }
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
             self.word_see(i);
-        }
-        for (key, index) in self.defined_variables.iter() {
-            self.variable_see(key, *index);
         }
     }
     fn f_stack_depth(&mut self) {
@@ -387,6 +407,8 @@ impl TF {
         self.pc_ptr = self.add_variable("pc", 0); // program counter
         self.compile_ptr = self.add_variable("compile?", 0); // compile mode
         self.abort_ptr = self.add_variable("abort?", 0); // abort flag
+        self.tib_size_ptr = self.add_variable("#tib", 0); // length of text input buffer
+        self.tib_in_ptr = self.add_variable(">in", 0); // current position in input buffer
     }
 
     fn add_variable(&mut self, name: &str, val: i64) -> usize {
@@ -401,7 +423,7 @@ impl TF {
         if address < self.dictionary.len() {
             let var = &self.dictionary[addr];
             match var {
-                ForthToken::Variable(name, v) => {
+                ForthToken::Variable(name, _v) => {
                     self.dictionary[addr] = ForthToken::Variable(name.to_owned(), new_val)
                 }
                 _ => self
@@ -428,6 +450,62 @@ impl TF {
         } else {
             self.set_abort_flag(true);
             0
+        }
+    }
+
+    fn f_accept(&mut self) {
+        // get a new line of input and initialize the pointer variable
+        match self.stack.pop() {
+            Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
+                Some(mut line) => {
+                    let max = max_len as usize;
+                    if line.len() > max {
+                        line = line[..max].to_string();
+                    }
+                    self.text_input = line;
+                    let length = self.text_input.len();
+                    self.var_set(self.tib_in_ptr, 0);
+                    self.var_set(self.tib_size_ptr, length as i64);
+                }
+                None => {
+                    self.msg
+                        .error("ACCEPT", "Unable to read from input", None::<bool>);
+                    self.f_abort();
+                }
+            },
+            None => self
+                .msg
+                .error("ACCEPT", "Required length not on stack", None::<bool>),
+        }
+    }
+
+    fn f_text(&mut self) {
+        // take delimiter from stack; grab string from TIB
+        // need to check if TIB is empty
+        // if delimiter = 1, get the rest of the TIB
+        match self.stack.pop() {
+            Some(d) => {
+                let delim = d as u8;
+                let in_p = self.var_get(self.tib_in_ptr);
+                let mut i = in_p as usize;
+                let mut j = i;
+                if delim as u8 == 1 {
+                    // get the rest of the line
+                    j = self.text_input.len();
+                } else {
+                    while i < self.text_input.len() && self.text_input.as_bytes()[i] == delim {
+                        // skip leading delims
+                        i += 1;
+                    }
+                    j = i;
+                    while j < self.text_input.len() && self.text_input.as_bytes()[j] != delim {
+                        j += 1;
+                    }
+                }
+                self.var_set(self.tib_in_ptr, j as i64);
+                self.text_pad = self.text_input[i..j - 1].to_owned(); // does not include j!
+            }
+            None => {} // stack was empty! error
         }
     }
 }
