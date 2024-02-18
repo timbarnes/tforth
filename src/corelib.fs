@@ -18,17 +18,18 @@
 : debug show-stack step-on ;
 : bl 32 ; ( puts the character code for a space on the stack )
 : space ( -- ) bl emit ;
-: spaces ( n -- ) 0 do space loop ;
+: spaces ( n -- ) 1- for space emit next ;
 : 1- ( n -- n-1 ) 1 - ;
 : 1+ ( n -- n+1 ) 1 + ;
 : endif then ; ( synonym for then, to allow if - else - endif conditionals )
-: ?stack depth 0= if abort then ;
+: ?stack depth 0= if ." Stack underflow" abort then ;
 
 
 : +! ( n addr -- ) dup @ rot + swap ! ;
 : ? ( addr -- ) @ . ;
 
-: run-regression clear s" src/regression.fs" loaded ;
+s" src/regression.fs" 
+: run-regression clear loaded ;
 
 
 ( Application functions )

@@ -417,68 +417,42 @@ impl TF {
         // if so, iterate over the definition, using execute_opcode()
         // save the value
         match &self.token_ptr.1 {
-            ForthToken::Definition(word_name, _) => {
-                match self.find_definition(word_name) {
-                    Some(index) => {
-                        let definition = &self.dictionary[index].clone();
-                        match definition {
-                            ForthToken::Definition(_n, code) => {
-                                // start by saving the program counter
-                                let pc = self.get_program_counter();
-                                self.return_stack.push(pc as i64);
-                                self.set_program_counter(0);
-                                // loop through the definition
-                                while self.get_program_counter() < code.len() {
-                                    if self.get_abort_flag() {
-                                        // code.clear();
-                                        self.stack.clear();
-                                        self.return_stack.clear();
-                                        self.set_program_counter(0);
-                                        self.set_abort_flag(false);
-                                        return;
-                                    } else {
-                                        let opcode = &code[self.get_program_counter()];
-                                        self.execute_opcode(opcode);
-                                        // self.increment_program_counter(1);
-                                    }
-                                }
-                                // pop the program counter and restore it
-                                if let Some(pc) = self.return_stack.pop() {
-                                    self.set_program_counter(pc as usize);
-                                } else {
-                                    self.msg.error(
-                                        "execute-definition",
-                                        "Return stack underflow",
-                                        None::<bool>,
-                                    );
-                                }
-                            }
-                            _ => {
-                                self.msg.error(
-                                    "execute-definition",
-                                    "Not a word",
-                                    Some(&self.token_ptr),
-                                );
-                            }
-                        }
-                    }
-                    None => {
-                        if self.defined_constants.contains_key(word_name) {
-                            self.stack.push(self.defined_constants[word_name]); // push the index on the stack
-                        } else {
-                            self.msg
-                                .error("execute_definition", "Undefined word", Some(word_name));
-                            if let Some(pc) = self.return_stack.pop() {
-                                self.set_program_counter(pc as usize); // pop the pc
-                            }
-                        }
-                    }
-                };
-            }
+            ForthToken::Definition(word_name, _) => match self.find_definition(word_name) {
+                Some(index) => self.execute_word(index),
+                None => self
+                    .msg
+                    .error("execute_definition", "Undefined word", Some(word_name)),
+            },
             _ => {
                 self.msg
                     .error("execute_definition", "Definition error", None::<bool>);
                 self.set_abort_flag(true);
+            }
+        }
+    }
+
+    fn execute_word(&mut self, index: usize) {
+        // executes the code part of a word at index
+        if let ForthToken::Definition(_, code) = self.dictionary[index].clone() {
+            let pc = self.get_program_counter() as i64;
+            self.return_stack.push(pc as i64);
+            self.set_program_counter(0);
+            // loop through the definition
+            while self.get_program_counter() < code.len() {
+                if self.get_abort_flag() {
+                    self.f_quit();
+                    return;
+                } else {
+                    let opcode = &code[self.get_program_counter()];
+                    self.execute_opcode(opcode);
+                }
+            }
+            // pop the program counter and restore it
+            if let Some(pc) = self.return_stack.pop() {
+                self.set_program_counter(pc as usize);
+            } else {
+                self.msg
+                    .error("execute-definition", "Return stack underflow", None::<bool>);
             }
         }
     }
@@ -490,6 +464,8 @@ impl TF {
             OpCode::L(n) => self.stack.push(*n),
             OpCode::Lstring(st) => print!("{}", st),
             OpCode::B(code) => self.execute_builtin(*code),
+            OpCode::D(_name) => {} // reserved
+            OpCode::W(idx) => self.execute_word(*idx),
             OpCode::V(idx) => self.stack.push(*idx as i64), // f_variable returns the address of the variable
             OpCode::C(idx) => self.stack.push(self.f_constant(*idx)), // get the constant's value
             OpCode::Jif(offset) => {

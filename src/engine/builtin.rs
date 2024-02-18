@@ -183,16 +183,15 @@ impl TF {
         print!("{:?}", self.text_pad);
     }
     fn f_emit(&mut self) {
-        if !self.stack_underflow("echo", 1) {
-            let n = self.stack.pop();
-            if let Some(n) = n {
+        match self.stack.pop() {
+            Some(n) => {
                 if (0x20..=0x7f).contains(&n) {
-                    let c = n as u8 as char;
-                    print!("{}", c);
+                    print!("{}", n as u8 as char);
                 } else {
                     self.msg.error("EMIT", "Arg out of range", Some(n));
                 }
             }
+            None => {}
         }
     }
     fn f_flush(&mut self) {
@@ -346,15 +345,16 @@ impl TF {
     fn f_rbracket(&mut self) {
         self.set_compile_mode(true);
     }
-    fn f_abort(&mut self) {
+    pub fn f_abort(&mut self) {
         // empty the stack, reset any pending operations, and return to the prompt
         self.msg
             .warning("ABORT", "Terminating execution", None::<bool>);
         self.stack.clear();
         self.set_abort_flag(true);
     }
-    fn f_quit(&mut self) {
+    pub fn f_quit(&mut self) {
         self.return_stack.clear();
+        self.set_program_counter(0);
         self.f_abort();
     }
     fn f_see_all(&mut self) {

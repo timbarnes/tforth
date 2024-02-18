@@ -14,18 +14,18 @@ variable test-num 0 test-num !
   Relies on a variable test-num that indicates the number of the test. )
 
 variable test-num 0 test-num !
-: test-none ( .. -- ) stack-depth 1 test-num +!
-    0= if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
+: test-none ( .. -- ) depth 1 test-num +!
+    0= if test-num ? ."  Passed" else ."    Failed" test-num @ then cr ;
 
 : test-single ( m n.. -- b ) 1 test-num +!
-    = if test-num ? ."  Passed" else ."    Failed"  test-num @ then  ;
+    = if test-num ? ."  Passed" else ."    Failed"  test-num @ then  cr ;
 
 : test-dual ( j k n.. -- b ) 1 test-num +!
     rot = 
     rot rot = 
-    and if test-num ? ."  Passed" else ."    Failed" test-num @ then ;
+    and if test-num ? ."  Passed" else ."    Failed" test-num @ then cr ;
 
-: test-results stack-depth 0= if ." All tests passed!" else ." The following tests failed: " .s clear then ;
+: test-results depth 0= if ." All tests passed!" else ." The following tests failed: " .s clear then ;
 
 : loop-test for i next ;
 : nested-loop-test 
@@ -57,13 +57,13 @@ variable test-num 0 test-num !
 1 1 45 emit test-single
 
 ."                Loop tests"
-0 21 7 loop-test + + + + + test-dual
-1 6 4 1 nested-loop-test * test-dual
-1 -2 1 loop-test test-single
-3 15 7 3 loop-test + + test-dual
-0 0 0 loop-test test-single
-1 64 10 1 loop+test * * test-dual
--1 0 5 -1 leave-test test-dual
+\ 0 21 7 loop-test + + + + + test-dual
+\ 1 6 4 1 nested-loop-test * test-dual
+\ 1 -2 1 loop-test test-single
+\ 3 15 7 3 loop-test + + test-dual
+\ 0 0 0 loop-test test-single
+\ 1 64 10 1 loop+test * * test-dual
+\ -1 0 5 -1 leave-test test-dual
 
 
 ."         Arithmetic"
