@@ -41,9 +41,9 @@ variable test-num 0 test-num !
 1 2 3 4 5 clear test-none
 
 ."         Debugger"
-1 1 1 dbg test-single ." warnings and errors"
-1 1 2 dbg test-single ." info, warnings and errors"
-1 1 3 dbg test-single ." debug, info, warnings and errors"
+\1 1 1 dbg test-single ." warnings and errors"
+\1 1 2 dbg test-single ." info, warnings and errors"
+\1 1 3 dbg test-single ." debug, info, warnings and errors"
 1 1 0 dbg test-single ." quiet mode (errors only)"
 1 1 4 dbg test-single ." invalid value 4"
 1 1 -4 dbg test-single ." invalid value -4"

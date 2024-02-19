@@ -90,7 +90,7 @@ impl TF {
                 new_word_name: String::new(),
                 new_word_definition: Vec::new(),
                 token_ptr: (0, ForthToken::Empty),
-                show_stack: false,
+                show_stack: true,
                 step_mode: false,
             }
         } else {

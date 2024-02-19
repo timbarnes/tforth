@@ -5,7 +5,7 @@
 #[allow(dead_code)]
 use crate::engine::{FileMode, TF};
 use crate::messages::DebugLevel;
-use crate::tokenizer::ForthToken;
+use crate::tokenizer::{is_integer, ForthToken};
 use std::cmp::min;
 use std::io::{self, Write};
 
@@ -149,9 +149,25 @@ impl TF {
         self.add("]", TF::f_rbracket, "");
         self.add("quit", TF::f_quit, "");
         self.add(
+            "execute",
+            TF::f_execute,
+            "execute: interpret the word whose address is on the stack",
+        );
+        self.add(
             "interpret",
             TF::f_interpret,
             "interpret: Interprets one line of Forth",
+        );
+        self.add(
+            "number?",
+            TF::f_number_q,
+            "number?: tests a string to see if it's a number;
+            leaves n and flag on the stack: true if number is ok.",
+        );
+        self.add(
+            "'",
+            TF::f_tick,
+            "' (tick): searches the dictionary for a (postfix) word",
         );
         self.add("accept", TF::f_accept, "");
         self.add("text", TF::f_text, "");
@@ -211,7 +227,7 @@ impl TF {
         self.show_stack = false;
     }
     fn f_dot_s_quote(&mut self) {
-        print!("{:?}", self.pad_ptr);
+        print!("{:?}", self.get_string_var(self.pad_ptr));
     }
     fn f_emit(&mut self) {
         match self.stack.pop() {
@@ -398,6 +414,13 @@ impl TF {
             }
         }
     }
+    fn f_execute(&mut self) {
+        // execute a word with addr on the stack
+        match self.stack.pop() {
+            Some(addr) => self.execute_word(addr as usize),
+            None => {}
+        }
+    }
     fn f_interpret(&mut self) {
         // process a line of tokens
         loop {
@@ -405,11 +428,136 @@ impl TF {
                 // no more tokens on this line
                 return;
             } else {
-                self.stack.push(' ' as i64);
-                self.f_text();
-                // INTERPRET needs the address on the stack
+                self.f_tick(); // grabs the next word and searches the dict
+                match self.stack.last() {
+                    Some(val) => {
+                        if *val > 0 {
+                            self.f_execute()
+                        } else {
+                            let _ = self.stack.pop(); // don't need the bogus code address
+                                                      // it's not a word, but could be a number
+                            self.stack.push(self.pad_ptr as i64);
+                            self.f_number_q(); // tries to convert the pad string
+                            match self.stack.pop() {
+                                Some(b) => {
+                                    if b == 0 {
+                                        // forth false flag
+                                        let _ = self.stack.pop(); // wasn't a number
+                                    }
+                                } // number is on the stack
+                                None => {} // error condition
+                            }
+                        }
+                    }
+                    None => {
+                        self.f_abort();
+                        return;
+                    }
+                }
             }
         }
+    }
+    fn f_number_q(&mut self) {
+        // try to convert the number with string address on the stack
+        let mut result = 0;
+        let mut flag = 0;
+        match self.stack.pop() {
+            Some(addr) => {
+                let numtext = self.get_string_var(addr as usize);
+                if is_integer(numtext.as_str()) {
+                    result = numtext.parse().unwrap();
+                    flag = -1; // valid number
+                }
+            }
+            None => {}
+        }
+        self.stack.push(result);
+        self.stack.push(flag);
+    }
+    fn f_tick(&mut self) {
+        // looks for a (postfix) word in the dictionary
+        // places it's execution token / address on the stack
+        self.f_s_quote(); // gets a string and places it in PAD
+                          // search the dictionary
+        let token = self.get_string_var(self.pad_ptr);
+        match self.find_definition(&token) {
+            Some(addr) => {
+                self.stack.push(addr as i64);
+            }
+            None => {
+                self.stack.push(0);
+            }
+        }
+    }
+    fn f_accept(&mut self) {
+        // get a new line of input and initialize the pointer variable
+        match self.stack.pop() {
+            Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
+                Some(mut line) => {
+                    let length = min(line.len() - 1, max_len as usize) as usize;
+                    line = line[..length].to_owned();
+                    self.set_string_var(self.tib_ptr, &line);
+                    self.set_var(self.tib_in_ptr, 0);
+                    self.set_var(self.tib_size_ptr, length as i64);
+                }
+                None => {
+                    self.msg
+                        .error("ACCEPT", "Unable to read from input", None::<bool>);
+                    self.f_abort();
+                }
+            },
+            None => self
+                .msg
+                .error("ACCEPT", "Required length not on stack", None::<bool>),
+        }
+    }
+    fn f_text(&mut self) {
+        // take delimiter from stack; grab string from TIB
+        // need to check if TIB is empty
+        // if delimiter = 1, get the rest of the TIB
+        match self.stack.pop() {
+            Some(d) => {
+                let delim = d as u8;
+                let in_p = self.get_var(self.tib_in_ptr);
+                let mut i = in_p as usize;
+                let mut j = i;
+                let line = &self.get_string_var(self.tib_ptr);
+                if delim as u8 == 1 {
+                    // get the rest of the line by setting j to the end
+                    j = self.get_var(self.tib_size_ptr) as usize;
+                } else {
+                    while i < line.len() && line.as_bytes()[i] == delim {
+                        // skip leading delims
+                        i += 1;
+                    }
+                    j = i;
+                    while j < line.len() && line.as_bytes()[j] != delim {
+                        j += 1;
+                    }
+                }
+                self.set_var(self.tib_in_ptr, j as i64);
+                let token = line[i..j].to_owned(); // does not include j!
+                self.set_string_var(self.pad_ptr, token.as_str());
+            }
+            None => self
+                .msg
+                .error("TEXT", "No delimiter on stack", None::<bool>), // stack was empty! error
+        }
+    }
+    fn f_type(&mut self) {
+        // print a string, found via pointer on stack
+        match self.stack.pop() {
+            Some(addr) => {
+                let text = self.get_string_var(addr as usize);
+                print!("{text}");
+            }
+            None => {}
+        }
+    }
+    fn f_s_quote(&mut self) {
+        // get a string and place it in PAD
+        self.stack.push(' ' as i64);
+        self.f_text(); // gets the string
     }
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
@@ -549,74 +697,6 @@ impl TF {
                     .msg
                     .error("stringvar_set", "Does not point to variable", Some(addr)),
             }
-        }
-    }
-
-    fn f_accept(&mut self) {
-        // get a new line of input and initialize the pointer variable
-        match self.stack.pop() {
-            Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
-                Some(mut line) => {
-                    let length = min(line.len() - 1, max_len as usize) as usize;
-                    line = line[..length].to_owned();
-                    self.set_string_var(self.tib_ptr, &line);
-                    self.set_var(self.tib_in_ptr, 0);
-                    self.set_var(self.tib_size_ptr, length as i64);
-                }
-                None => {
-                    self.msg
-                        .error("ACCEPT", "Unable to read from input", None::<bool>);
-                    self.f_abort();
-                }
-            },
-            None => self
-                .msg
-                .error("ACCEPT", "Required length not on stack", None::<bool>),
-        }
-    }
-
-    fn f_text(&mut self) {
-        // take delimiter from stack; grab string from TIB
-        // need to check if TIB is empty
-        // if delimiter = 1, get the rest of the TIB
-        match self.stack.pop() {
-            Some(d) => {
-                let delim = d as u8;
-                let in_p = self.get_var(self.tib_in_ptr);
-                let mut i = in_p as usize;
-                let mut j = i;
-                let line = &self.get_string_var(self.tib_ptr);
-                if delim as u8 == 1 {
-                    // get the rest of the line by setting j to the end
-                    j = self.get_var(self.tib_size_ptr) as usize;
-                } else {
-                    while i < line.len() && line.as_bytes()[i] == delim {
-                        // skip leading delims
-                        i += 1;
-                    }
-                    j = i;
-                    while j < line.len() && line.as_bytes()[j] != delim {
-                        j += 1;
-                    }
-                }
-                self.set_var(self.tib_in_ptr, j as i64);
-                let token = line[i..j].to_owned(); // does not include j!
-                self.set_string_var(self.pad_ptr, token.as_str());
-            }
-            None => self
-                .msg
-                .error("TEXT", "No delimiter on stack", None::<bool>), // stack was empty! error
-        }
-    }
-
-    fn f_type(&mut self) {
-        // print a string, found via pointer on stack
-        match self.stack.pop() {
-            Some(addr) => {
-                let text = self.get_string_var(addr as usize);
-                print!("{text}");
-            }
-            None => {}
         }
     }
 }

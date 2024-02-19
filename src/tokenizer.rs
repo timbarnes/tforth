@@ -25,7 +25,7 @@ pub enum ForthToken {
     Jump(String, usize),  // branch
     Forward(ForwardInfo), // a read_ahead token (string, comment etc.)
     Definition(String, Vec<OpCode>),
-    Builtin(String, usize), // the u8 is a future op code for the builtin, to replace string search
+    Builtin(String, usize), // name and op code for the builtin
     Variable(String, i64),
     Constant(String, i64),
     StringVar(String, String), // a text string variable
