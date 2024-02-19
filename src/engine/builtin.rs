@@ -664,7 +664,7 @@ impl TF {
     }
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
-            self.word_see(i);
+            self.see_word(i);
         }
     }
     fn f_stack_depth(&mut self) {

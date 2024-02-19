@@ -389,13 +389,10 @@ impl TF {
                     "see" => {
                         // ( "word name" -- ) print a word's definition or
                         // a builtin's documentation string
-                        let result = self.find_definition(info.tail.trim()); // gets the index of a word
+                        let result = self.find(info.tail.trim()); // gets the index of a word
                         match result {
-                            Some(idx) => self.word_see(idx),
-                            None => {
-                                self.msg
-                                    .warning("see", "word not found", Some(info.tail.trim()))
-                            }
+                            Some(idx) => self.see_word(idx),
+                            None => {}
                         }
                     }
                     _ => {}
@@ -603,70 +600,74 @@ impl TF {
 
     fn find(&self, name: &str) -> Option<usize> {
         // find a word if it's defined; search from the newest to the oldest
-        if self.dictionary.len() > 0 {
-            for (i, token) in self.dictionary.iter().rev().enumerate() {
-                match token {
-                    ForthToken::Definition(n, _)
-                    | ForthToken::Variable(n, _)
-                    | ForthToken::Constant(n, _) => {
-                        if n.as_str() == name {
-                            return Some(self.dictionary.len() - i - 1);
-                        }
-                    }
-                    _ => {} // should only be definitions, variables and constants in the list
-                }
-            }
+        match self.find_definition(name) {
+            Some(idx) => return Some(idx),
+            None => {}
+        }
+        match self.find_builtin(name) {
+            Some((idx, _)) => return Some(idx + 1000),
+            None => {}
         }
         None
     }
 
-    fn word_see(&self, index: usize) {
+    fn see_word(&self, index: usize) {
         // soon adding variables and constants
-        let token = &self.dictionary[index];
-        match token {
-            ForthToken::Definition(name, def) => {
-                print!(": {name} ");
-                for word in def {
-                    match word {
-                        OpCode::F(f) => print!("f{} ", f),
-                        OpCode::B(idx) => print!("{} ", &self.builtins[*idx].name),
-                        OpCode::W(idx) => {
-                            let token = &self.dictionary[*idx];
-                            match token {
-                                ForthToken::Definition(name, _code) => {
-                                    print!("{} ", name);
+        if index < 1000 {
+            // it's a definition
+            match &self.dictionary[index] {
+                ForthToken::Definition(name, def) => {
+                    print!(": {name} ");
+                    for word in def {
+                        match word {
+                            OpCode::F(f) => print!("f{} ", f),
+                            OpCode::B(idx) => print!("{} ", &self.builtins[*idx].name),
+                            OpCode::W(idx) => {
+                                let token = &self.dictionary[*idx];
+                                match token {
+                                    ForthToken::Definition(name, _code) => {
+                                        print!("{} ", name);
+                                    }
+                                    _ => {}
                                 }
-                                _ => {}
                             }
-                        }
-                        OpCode::Jif(offset) => print!("if:{offset} "),
-                        OpCode::Jelse(offset) => print!("else:{offset} "),
-                        OpCode::Jthen(offset) => print!("then:{offset} "),
-                        OpCode::Jfor(offset) => print!("for:{offset} "),
-                        OpCode::Jnext(offset) => print!("next:{offset} "),
-                        OpCode::Lstring(info) => print!(".\" {info} "),
-                        OpCode::Lparen(txt) => print!("({} ", txt),
-                        OpCode::L(n) => print!("{n} "),
-                        OpCode::V(idx) => {
-                            if let ForthToken::Variable(name, val) = &self.dictionary[*idx] {
-                                print!("V {}={} ", name, val);
+                            OpCode::Jif(offset) => print!("if:{offset} "),
+                            OpCode::Jelse(offset) => print!("else:{offset} "),
+                            OpCode::Jthen(offset) => print!("then:{offset} "),
+                            OpCode::Jfor(offset) => print!("for:{offset} "),
+                            OpCode::Jnext(offset) => print!("next:{offset} "),
+                            OpCode::Lstring(info) => print!(".\" {info} "),
+                            OpCode::Lparen(txt) => print!("({} ", txt),
+                            OpCode::L(n) => print!("{n} "),
+                            OpCode::V(idx) => {
+                                if let ForthToken::Variable(name, val) = &self.dictionary[*idx] {
+                                    print!("V {}={} ", name, val);
+                                }
                             }
-                        }
-                        OpCode::C(idx) => {
-                            if let ForthToken::Constant(name, val) = &self.dictionary[*idx] {
-                                print!("C {}={} ", name, val);
+                            OpCode::C(idx) => {
+                                if let ForthToken::Constant(name, val) = &self.dictionary[*idx] {
+                                    print!("C {}={} ", name, val);
+                                }
                             }
+                            OpCode::Noop => print!("Noop "),
+                            OpCode::D(_name) => print!("!!Definition not implemented"),
                         }
-                        OpCode::Noop => print!("Noop "),
-                        OpCode::D(_name) => print!("!!Definition not implemented"),
                     }
+                    println!(";");
                 }
-                println!(";");
+                ForthToken::Variable(name, val) => println!("Variable {name} = {val} "),
+                ForthToken::Constant(name, val) => println!("Constant {name} = {val} "),
+                ForthToken::StringVar(name, val) => println!("String {name} = <{val}> "),
+                _ => {}
             }
-            ForthToken::Variable(name, val) => println!("V {name} = {val} "),
-            ForthToken::Constant(name, val) => println!("C {name} = {val} "),
-            ForthToken::StringVar(name, val) => println!("S {name} = <{val}> "),
-            _ => {}
+        } else {
+            // it's a builtin
+            match &self.builtins[index - 1000] {
+                BuiltInFn { name, code, doc } => {
+                    println!("BuiltIn {}: {}", index - 1000, doc);
+                }
+                _ => {}
+            }
         }
     }
 
