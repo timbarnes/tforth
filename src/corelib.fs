@@ -29,14 +29,14 @@
 : ? ( addr -- ) @ . ;
 
 s" src/regression.fs" 
-: run-regression clear loaded ;
+: run-regression clear include-file ;
 
 
 ( Application functions )
 
 : _fac ( r n -- r )   \ Helper function that does most of the work.
     dup if 
-        tuck * swap 1 - _fac 
+        tuck * swap 1 - recurse \ NOT YET IMPLEMENTED 
     else 
         drop 
     then ;

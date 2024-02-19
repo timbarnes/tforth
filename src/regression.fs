@@ -115,9 +115,9 @@ false 55 0< test-single
 12 12 constant months months test-single \ a constant with the value 12
 
 ."        Application tests"
-1 0 fac test-single
-1 1 fac test-single
-6 3 fac test-single
-479001600 12 fac test-single 
+\ 1 0 fac test-single
+\ 1 1 fac test-single
+\ 6 3 fac test-single
+\ 479001600 12 fac test-single 
 
 test-results  \ Checks to see if all tests passed. Errors, if any, are left on the stack.

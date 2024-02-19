@@ -3,7 +3,7 @@
 /// Set up a table of builtin functions, with names and code
 
 #[allow(dead_code)]
-use crate::engine::{FileMode, TF};
+use crate::engine::*;
 use crate::messages::DebugLevel;
 use crate::tokenizer::{is_integer, ForthToken};
 use std::cmp::min;
@@ -54,9 +54,46 @@ macro_rules! pop1 {
 }
 
 impl TF {
+    pub fn f_insert_variables(&mut self) {
+        // install system variables in data area
+        // hand craft HERE, because it's needed by make_word
+        self.data[0] = 0; // null pointer
+        self.data[1] = 4 as i64; //
+        for (i, c) in "here".char_indices() {
+            self.data[i + 2] = c as i64;
+        }
+        self.data[6] = 7; // the value of HERE
+        self.data[7] = 0; // back pointer
+        self.here_ptr = 6; // the address of the HERE variable
+
+        // hand craft CONTEXT, because it's needed by make_word
+        self.data[8] = 7 as i64;
+        for (i, c) in "context".char_indices() {
+            self.data[i + 9] = c as i64;
+        }
+        self.data[16] = 8;
+        self.data[17] = 7; // back pointer
+        self.context_ptr = 8;
+        self.data[self.here_ptr] = 17;
+
+        /*         self.base_ptr = self.make_variable("base");
+               self.data[self.base_ptr] = 10;
+               self.tmp_ptr = self.make_variable("tmp");
+               self.tib_in_ptr = self.make_variable(">in");
+               self.data[self.tib_in_ptr as usize] = TIB_START as i32;
+               self.hld_ptr = self.make_variable("hld");
+
+               self.last_ptr = self.make_variable("last");
+               self.data[self.here_ptr] as usize
+        */
+    }
+
+    fn f_insert_variable(&mut self) {}
+
     fn add(&mut self, name: &str, code: for<'a> fn(&'a mut TF), doc: &str) {
         self.builtins
             .push(BuiltInFn::new(name.to_owned(), code, doc.to_string()));
+        // now build the DATA space record
     }
 
     pub fn add_builtins(&mut self) {
@@ -252,6 +289,11 @@ impl TF {
             TF::f_number_q,
             "number?: tests a string to see if it's a number;
             leaves n and flag on the stack: true if number is ok.",
+        );
+        self.add(
+            "?unique",
+            TF::f_q_unique,
+            "?unique ( a -- b ) tests to see if the name TOS points to is in the dictionary",
         );
         self.add(
             "'",
@@ -569,6 +611,13 @@ impl TF {
         self.stack.push(result);
         self.stack.push(flag);
     }
+    fn f_q_unique(&mut self) {
+        // see if a word is unique. Result boolean on stack
+        match self.stack.pop() {
+            Some(v) => self.stack.push(TRUE),
+            None => self.stack.push(FALSE),
+        }
+    }
     fn f_tick(&mut self) {
         // looks for a (postfix) word in the dictionary
         // places it's execution token / address on the stack
@@ -576,20 +625,9 @@ impl TF {
         self.f_s_quote(); // gets a string and places it in PAD
                           // search the dictionary
         let token = self.get_string_var(self.pad_ptr);
-        match self.find_definition(&token) {
-            Some(addr) => {
-                self.stack.push(addr as i64);
-            }
-            None => {
-                // search builtins
-                match self.find_builtin(&token) {
-                    Some((idx, _code)) => {
-                        self.stack.push(1000 + idx as i64);
-                    }
-                    None => self.stack.push(0), // not found
-                }
-                // self.stack.push(0);
-            }
+        match self.find(&token) {
+            Some(idx) => self.stack.push(idx as i64),
+            None => self.stack.push(0),
         }
     }
     fn f_accept(&mut self) {

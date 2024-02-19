@@ -10,6 +10,19 @@ use crate::reader::Reader;
 use crate::tokenizer::{ForthToken, Tokenizer};
 use builtin::BuiltInFn;
 
+const DATA_SIZE: usize = 10000;
+const TIB_START: usize = DATA_SIZE - 132;
+const PAD_START: usize = TIB_START - 132;
+const ALLOC_START: usize = PAD_START - 1;
+const STACK_START: usize = DATA_SIZE / 2; // stack counts up
+const RET_START: usize = STACK_START - 1; // return stack counts downwards
+const WORD_START: usize = 0; // data area counts up from the bottom (builtins, words, variables etc.)
+pub const TRUE: i64 = -1; // forth convention for true and false
+pub const FALSE: i64 = 0;
+
+const IMMEDIATE: u32 = 1 << 26;
+const LEN_MASK: u32 = 0xFFF;
+
 #[derive(Clone, Debug)]
 pub enum OpCode {
     // used in compiled definitions to reference objects
@@ -32,13 +45,18 @@ pub enum OpCode {
 
 //#[derive(Debug)]
 pub struct TF {
+    data: [i64; DATA_SIZE],
     pub stack: Vec<i64>,             // the numeric stack, currently integers
     pub dictionary: Vec<ForthToken>, // the dictionary: keys (words) and their definitions
     pub builtins: Vec<BuiltInFn>,    // the dictionary of builtins
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
     return_stack: Vec<i64>,          // for do loops etc.
-    pad_ptr: usize,                  // the current s".."" string
+    here_ptr: usize,
+    stack_ptr: usize,
+    context_ptr: usize,
+    base_ptr: usize,
+    pad_ptr: usize, // the current s".."" string
     file_mode: FileMode,
     compile_ptr: usize, // true if compiling a word
     pc_ptr: usize,      // program counter
@@ -70,12 +88,17 @@ impl TF {
         if let Some(reader) = Reader::new(None, main_prompt, multiline_prompt, Msg::new()) {
             let parser = Tokenizer::new(reader);
             TF {
+                data: [0; DATA_SIZE],
                 stack: Vec::new(),
                 dictionary: Vec::new(),
                 builtins: Vec::new(),
                 defined_variables: HashMap::new(),
                 defined_constants: HashMap::new(),
                 return_stack: Vec::new(),
+                here_ptr: WORD_START,
+                stack_ptr: STACK_START,
+                context_ptr: 0,
+                base_ptr: 0,
                 pad_ptr: 0,
                 file_mode: FileMode::Unset,
                 compile_ptr: 0,
@@ -99,6 +122,8 @@ impl TF {
     }
 
     pub fn cold_start(&mut self) {
+        self.f_insert_variables();
+        //self.f_insert_builtins();
         self.add_builtins();
         self.add_variables();
     }
