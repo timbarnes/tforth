@@ -160,8 +160,7 @@ impl TF {
     }
 
     fn pop_one(&mut self, word: &str) -> Option<i64> {
-        let val = self.stack.pop();
-        match val {
+        match self.stack.pop() {
             Some(value) => Some(value),
             None => {
                 self.msg.error(word, "Stack underflow", None::<bool>);

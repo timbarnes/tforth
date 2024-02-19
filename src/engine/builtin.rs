@@ -61,39 +61,67 @@ impl TF {
 
     pub fn add_builtins(&mut self) {
         // add the builtins to the builtin dictionary
-        self.add("+", TF::f_plus, "( j k -- j+k ) Push j+k on the stack");
-        self.add("-", TF::f_minus, "( j k -- j+k ) Push j-k on the stack");
-        self.add("*", TF::f_times, "( j k -- j-k ) Push  -k on the stack");
-        self.add("/", TF::f_divide, "( j k -- j/k ) Push j/k on the stack");
-        self.add("mod", TF::f_mod, "( j k -- j/k ) Push j%k on the stack");
+        self.add("+", TF::f_plus, "+ ( j k -- j+k ) Push j+k on the stack");
+        self.add("-", TF::f_minus, "- ( j k -- j+k ) Push j-k on the stack");
+        self.add("*", TF::f_times, "* ( j k -- j-k ) Push  -k on the stack");
+        self.add("/", TF::f_divide, "/ ( j k -- j/k ) Push j/k on the stack");
+        self.add("mod", TF::f_mod, "mod ( j k -- j/k ) Push j%k on the stack");
         self.add(
             "<",
             TF::f_less,
             "( j k -- j/k ) If j < k push true else false",
         );
-        self.add(".", TF::f_dot, "");
+        self.add(
+            ".",
+            TF::f_dot,
+            ". ( n -- ) Pop the top of the stack and print it, followed by a space",
+        );
         self.add(
             "true",
             TF::f_true,
-            "( -- -1 ) Push the canonical true value on the stack.",
+            "true ( -- -1 ) Push the canonical true value on the stack.",
         );
-        self.add("false", TF::f_false, "");
+        self.add(
+            "false",
+            TF::f_false,
+            "false ( -- 0 ) Push the canonical false value on the stack",
+        );
         self.add(
             "=",
             TF::f_equal,
-            "( j k -- b ) If j == k push true else false",
+            "= ( j k -- b ) If j == k push true else false",
         );
-        self.add("0=", TF::f_0equal, "");
+        self.add(
+            "0=",
+            TF::f_0equal,
+            "0= ( j -- b ) If j == 0 push true else false",
+        );
         self.add(
             "0<",
             TF::f_0less,
             "( j k -- j/k ) If j < 0 push true else false",
         );
-        self.add(".s", TF::f_dot_s, "");
-        self.add("cr", TF::f_cr, "");
-        self.add("show-stack", TF::f_show_stack, "");
-        self.add("hide-stack", TF::f_hide_stack, "");
-        self.add(".s\"", TF::f_dot_s_quote, "");
+        self.add(
+            ".s",
+            TF::f_dot_s,
+            ".s ( -- ) Print the contents of the calculation stack",
+        );
+        self.add("cr", TF::f_cr, "cr ( -- ) Print a newline");
+        self.add(
+            "show-stack",
+            TF::f_show_stack,
+            "show-stack ( -- ) Display the stack at the end of each line of console input",
+        );
+        self.add(
+            "hide-stack",
+            TF::f_hide_stack,
+            "hide-stack ( -- ) Turn off automatic stack display",
+        );
+        self.add(
+            ".s\"",
+            TF::f_dot_s_quote,
+            ".s\" Print the contents of the pad",
+        );
         self.add(
             "emit",
             TF::f_emit,
@@ -112,18 +140,50 @@ impl TF {
             TF::f_words,
             "words: Lists all defined words to the terminal",
         );
-        self.add("dup", TF::f_dup, "");
-        self.add("drop", TF::f_drop, "");
-        self.add("swap", TF::f_swap, "");
-        self.add("over", TF::f_over, "");
-        self.add("rot", TF::f_rot, "");
-        self.add("and", TF::f_and, "");
-        self.add("or", TF::f_or, "");
+        self.add(
+            "dup",
+            TF::f_dup,
+            "dup ( n -- n n ) Push a second copy of the top of stack",
+        );
+        self.add(
+            "drop",
+            TF::f_drop,
+            "drop ( n --  ) Pop the top element off the stack",
+        );
+        self.add(
+            "swap",
+            TF::f_swap,
+            "swap ( m n -- n m ) Reverse the order of the top two stack elements",
+        );
+        self.add(
+            "over",
+            TF::f_over,
+            "over ( m n -- m n m ) Push a copy of the second item on the stack on to",
+        );
+        self.add(
+            "rot",
+            TF::f_rot,
+            "rot ( i j k -- j k i ) Move the third stack item to the top",
+        );
+        self.add(
+            "and",
+            TF::f_and,
+            "and ( a b -- a & b ) Pop a and b, returning the logical and",
+        );
+        self.add(
+            "or",
+            TF::f_or,
+            "or ( a b -- a | b ) Pop a and b, returning the logical or",
+        );
         self.add("@", TF::f_get, "@: ( a -- v ) Pushes variable a's value");
         self.add("!", TF::f_store, "!: ( v a -- ) stores v at address a");
         self.add("i", TF::f_i, "Pushes the current FOR - NEXT loop index");
         self.add("j", TF::f_j, "Pushes the second-level (outer) loop index");
-        self.add("abort", TF::f_abort, "");
+        self.add(
+            "abort",
+            TF::f_abort,
+            "abort ( -- ) Ends execution of the current word and clears the stack",
+        );
         self.add(
             "see-all",
             TF::f_see_all,
@@ -134,20 +194,49 @@ impl TF {
             TF::f_stack_depth,
             "depth: Pushes the current stack depth",
         );
-        self.add("key", TF::f_key, "");
+        self.add(
+            "key",
+            TF::f_key,
+            "key ( -- c ) Get a character from the terminal",
+        );
         self.add("r/w", TF::f_r_w, "");
         self.add("r/o", TF::f_r_o, "");
-        self.add("loaded", TF::f_loaded, "");
+        self.add(
+            "include-file",
+            TF::f_include_file,
+            "include-file ( a -- ) Taking the TOS as a pointer to 
+        a filename (string), load a file of source code",
+        );
         self.add("dbg", TF::f_dbg, "");
-        self.add("debuglevel", TF::f_debuglevel, "");
+        self.add(
+            "debuglevel",
+            TF::f_debuglevel,
+            "debuglevel ( -- ) Displays the current debug level",
+        );
         self.add("step-on", TF::f_step_on, "");
         self.add("step-off", TF::f_step_off, "");
-        self.add(">r", TF::f_to_r, "");
-        self.add("r>", TF::f_r_from, "");
-        self.add("r@", TF::f_r_get, "");
-        self.add("[", TF::f_lbracket, "");
-        self.add("]", TF::f_rbracket, "");
-        self.add("quit", TF::f_quit, "");
+        self.add(
+            ">r",
+            TF::f_to_r,
+            ">r ( n -- ) Pop stack and push value to return stack",
+        );
+        self.add(
+            "r>",
+            TF::f_r_from,
+            "r> ( -- n ) Pop return stack and push value to calculation stack",
+        );
+        self.add(
+            "r@",
+            TF::f_r_get,
+            "r@ ( -- n ) Push the value on the top of the return stack to the calculation stack",
+        );
+        self.add("[", TF::f_lbracket, "[ ( -- ) Exit compile mode");
+        self.add("]", TF::f_rbracket, "] ( -- ) Enter compile mode");
+        self.add(
+            "quit",
+            TF::f_quit,
+            "quit ( -- ) Outer interpreter that repeatedly reads input lines and runs them",
+        );
         self.add(
             "execute",
             TF::f_execute,
@@ -596,7 +685,7 @@ impl TF {
     fn f_r_o(&mut self) {
         self.file_mode = FileMode::ReadOnly;
     }
-    fn f_loaded(&mut self) {
+    fn f_include_file(&mut self) {
         self.loaded();
     }
     fn f_dbg(&mut self) {
