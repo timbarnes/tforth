@@ -417,7 +417,13 @@ impl TF {
     fn f_execute(&mut self) {
         // execute a word with addr on the stack
         match self.stack.pop() {
-            Some(addr) => self.execute_word(addr as usize),
+            Some(addr) => {
+                if addr < 999 {
+                    self.execute_word(addr as usize);
+                } else {
+                    self.execute_builtin(addr as usize - 1000);
+                }
+            }
             None => {}
         }
     }
@@ -429,13 +435,13 @@ impl TF {
                 return;
             } else {
                 self.f_tick(); // grabs the next word and searches the dict
-                match self.stack.last() {
+                match self.stack.pop() {
                     Some(val) => {
-                        if *val > 0 {
-                            self.f_execute()
+                        if val > 0 {
+                            self.stack.push(val);
+                            self.f_execute();
                         } else {
-                            let _ = self.stack.pop(); // don't need the bogus code address
-                                                      // it's not a word, but could be a number
+                            // it's not a word, but could be a number
                             self.stack.push(self.pad_ptr as i64);
                             self.f_number_q(); // tries to convert the pad string
                             match self.stack.pop() {
@@ -477,6 +483,7 @@ impl TF {
     fn f_tick(&mut self) {
         // looks for a (postfix) word in the dictionary
         // places it's execution token / address on the stack
+        // builtin addresses have been bumped up by 1000 to distinguish them
         self.f_s_quote(); // gets a string and places it in PAD
                           // search the dictionary
         let token = self.get_string_var(self.pad_ptr);
@@ -485,7 +492,14 @@ impl TF {
                 self.stack.push(addr as i64);
             }
             None => {
-                self.stack.push(0);
+                // search builtins
+                match self.find_builtin(&token) {
+                    Some((idx, _code)) => {
+                        self.stack.push(1000 + idx as i64);
+                    }
+                    None => self.stack.push(0), // not found
+                }
+                // self.stack.push(0);
             }
         }
     }
