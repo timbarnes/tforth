@@ -117,12 +117,9 @@ impl Tokenizer {
             if self.line.is_empty() {
                 let line = self.reader.get_line(&"".to_owned(), multiline);
                 match line {
-                    Some(line) => {
-                        self.line = line;
-                    }
-                    None => {
-                        return None; // Signals EOF
-                    }
+                    Some(line) => self.line = line,
+
+                    None => return None, // Signals EOF
                 }
             }
             'scan: for c in self.line.chars() {
@@ -159,17 +156,13 @@ impl Tokenizer {
                         Some(format!("{:?}", self.line.len())),
                     );
                 }
-                None => {
-                    return None;
-                }
+                None => return None,
             }
         }
         self.line = self.line.trim_start().to_string(); // We never need leading spaces.
         for c in self.line.chars() {
             match c {
-                '\n' | '\t' | ' ' => {
-                    break;
-                }
+                '\n' | '\t' | ' ' => break,
                 _ => {
                     token_string.push(c);
                     chars_used += 1;

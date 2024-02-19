@@ -30,7 +30,7 @@ variable test-num 0 test-num !
 : loop-test for i next ;
 : nested-loop-test 
     for 
-        6 for 
+        3 for 
             i . j .
             next i . 
         i 
@@ -57,9 +57,9 @@ variable test-num 0 test-num !
 1 1 45 emit test-single
 
 ."                Loop tests"
-\ 0 21 7 loop-test + + + + + test-dual
-\ 1 6 4 1 nested-loop-test * test-dual
-\ 1 -2 1 loop-test test-single
+ 7 21 7 loop-test + + + + + + test-dual
+ 4 2 4 nested-loop-test - - - test-dual
+ 55 -2 loop-test 55 test-single
 \ 3 15 7 3 loop-test + + test-dual
 \ 0 0 0 loop-test test-single
 \ 1 64 10 1 loop+test * * test-dual

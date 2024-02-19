@@ -113,14 +113,6 @@ impl Config {
 
         forth.set_abort_flag(false); // abort flag may have been set by load_file, but is no longer needed.
 
-        /*
-        // Define some Forth words
-        interpreter.defined_words.insert(
-            String::from("double"),
-            vec![ForthToken::Number(2), ForthToken::Operator("*".to_string())],
-        );
-        */
-
         println!("{WELCOME_MESSAGE} Version {VERSION}");
 
         // Enter the interactive loop to read and process input

@@ -323,8 +323,8 @@ impl TF {
                 OpCode::Jnext(delta) => {
                     if let Some(slot) = loop_stack.pop() {
                         self.new_word_definition[slot] = OpCode::Jfor(step - slot);
+                        self.new_word_definition[step] = OpCode::Jnext(step - slot + 1);
                     }
-                    self.new_word_definition[step] = OpCode::Jnext(step - delta + 1);
                 }
                 _ => {}
             }
