@@ -11,14 +11,25 @@ use crate::tokenizer::{ForthToken, Tokenizer};
 use builtin::BuiltInFn;
 
 const DATA_SIZE: usize = 10000;
-const TIB_START: usize = DATA_SIZE - 132;
-const PAD_START: usize = TIB_START - 132;
-const ALLOC_START: usize = PAD_START - 1;
+const STRING_SIZE: usize = 5000;
+const BUF_SIZE: usize = 132;
+const TIB_START: usize = 0;
+const PAD_START: usize = TIB_START + BUF_SIZE;
+const STR_START: usize = PAD_START + BUF_SIZE;
+const ALLOC_START: usize = PAD_START + BUF_SIZE;
 const STACK_START: usize = DATA_SIZE / 2; // stack counts up
 const RET_START: usize = STACK_START - 1; // return stack counts downwards
 const WORD_START: usize = 0; // data area counts up from the bottom (builtins, words, variables etc.)
 pub const TRUE: i64 = -1; // forth convention for true and false
 pub const FALSE: i64 = 0;
+
+// Indices into builtins to drive execution of each data type
+pub const BUILTIN: i64 = 0;
+pub const VARIABLE: i64 = 1;
+pub const CONSTANT: i64 = 2;
+pub const LITERAL: i64 = 3;
+pub const STRING: i64 = 4;
+pub const DEFINITION: i64 = 5;
 
 const IMMEDIATE: u32 = 1 << 26;
 const LEN_MASK: u32 = 0xFFF;
@@ -45,18 +56,21 @@ pub enum OpCode {
 
 //#[derive(Debug)]
 pub struct TF {
-    data: [i64; DATA_SIZE],
-    pub stack: Vec<i64>,             // the numeric stack, currently integers
-    pub dictionary: Vec<ForthToken>, // the dictionary: keys (words) and their definitions
-    pub builtins: Vec<BuiltInFn>,    // the dictionary of builtins
+    pub data: [i64; DATA_SIZE],
+    pub strings: [char; STRING_SIZE], // storage for strings
+    pub stack: Vec<i64>,              // the numeric stack, currently integers
+    pub dictionary: Vec<ForthToken>,  // the dictionary: keys (words) and their definitions
+    pub builtins: Vec<BuiltInFn>,     // the dictionary of builtins
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
-    return_stack: Vec<i64>,          // for do loops etc.
+    return_stack: Vec<i64>,           // for do loops etc.
     here_ptr: usize,
     stack_ptr: usize,
     context_ptr: usize,
     base_ptr: usize,
-    pad_ptr: usize, // the current s".."" string
+    pad_ptr: usize,    // the current s".."" string
+    string_ptr: usize, // points to the beginning of free string space
+    last_ptr: usize,   // points to name of top word
     file_mode: FileMode,
     compile_ptr: usize, // true if compiling a word
     pc_ptr: usize,      // program counter
@@ -89,6 +103,7 @@ impl TF {
             let parser = Tokenizer::new(reader);
             TF {
                 data: [0; DATA_SIZE],
+                strings: [' '; STRING_SIZE],
                 stack: Vec::new(),
                 dictionary: Vec::new(),
                 builtins: Vec::new(),
@@ -97,9 +112,11 @@ impl TF {
                 return_stack: Vec::new(),
                 here_ptr: WORD_START,
                 stack_ptr: STACK_START,
+                string_ptr: 0,
                 context_ptr: 0,
                 base_ptr: 0,
                 pad_ptr: 0,
+                last_ptr: 0,
                 file_mode: FileMode::Unset,
                 compile_ptr: 0,
                 pc_ptr: 0,
@@ -345,7 +362,7 @@ impl TF {
                     // push onto branch_stack
                     loop_stack.push(step);
                 }
-                OpCode::Jnext(delta) => {
+                OpCode::Jnext(_delta) => {
                     if let Some(slot) = loop_stack.pop() {
                         self.new_word_definition[slot] = OpCode::Jfor(step - slot);
                         self.new_word_definition[step] = OpCode::Jnext(step - slot + 1);
@@ -746,5 +763,31 @@ impl TF {
                 Some(_) | None => {}
             }
         }
+    }
+
+    pub fn pack_string(&self, input: &str) -> Vec<usize> {
+        // tries to pack a string
+        let mut output = Vec::new();
+        let mut tmp = input.len();
+        println!("{:#x}", tmp);
+
+        let words: usize = input.len() / 7 + 1;
+        //println!("Words:{words}");
+        let mut i = 0;
+        for c in input.chars() {
+            i += 1;
+            if i % 8 == 0 {
+                output.push(tmp);
+                tmp = 0;
+            }
+            let shift = i % 8;
+            let new = (c as u8 as usize) << 8 * shift;
+            println!("{shift} {:#x}", new);
+            tmp |= (c as u8 as usize) << 8 * shift;
+            //println!("tmp{:#x}", tmp);
+        }
+        output.push(tmp);
+        //println!("Finished packing");
+        output
     }
 }

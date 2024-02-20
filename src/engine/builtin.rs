@@ -56,36 +56,87 @@ macro_rules! pop1 {
 impl TF {
     pub fn f_insert_variables(&mut self) {
         // install system variables in data area
-        // hand craft HERE, because it's needed by make_word
-        self.data[0] = 0; // null pointer
-        self.data[1] = 4 as i64; //
-        for (i, c) in "here".char_indices() {
-            self.data[i + 2] = c as i64;
+        // hand craft S-HERE (free string pointer) so write_string() can work
+        self.data[0] = 0;
+        self.data[1] = STR_START as i64; //
+        self.strings[STR_START] = 6 as char; // length of "s-here"
+        for (i, c) in "s-here".chars().enumerate() {
+            self.strings[i + STR_START + 1] = c;
         }
-        self.data[6] = 7; // the value of HERE
-        self.data[7] = 0; // back pointer
-        self.here_ptr = 6; // the address of the HERE variable
+        self.string_ptr = 3;
+        self.data[2] = VARIABLE;
+        self.data[3] = (STR_START + 7) as i64; // update the value of S-HERE
+        self.data[4] = 0; // back pointer
+                          // hand craft HERE, because it's needed by make_word
+        let name_pointer = self.write_string("here");
+        self.data[5] = name_pointer as i64;
+        self.data[6] = VARIABLE;
+        self.data[7] = 9; // the value of HERE
+        self.data[8] = 4; // back pointer
+        self.here_ptr = 7; // the address of the HERE variable
 
         // hand craft CONTEXT, because it's needed by make_word
-        self.data[8] = 7 as i64;
-        for (i, c) in "context".char_indices() {
-            self.data[i + 9] = c as i64;
-        }
-        self.data[16] = 8;
-        self.data[17] = 7; // back pointer
+        self.data[9] = self.write_string("context") as i64;
+        self.data[10] = VARIABLE;
+        self.data[11] = 9;
+        self.data[12] = 8; // back pointer
         self.context_ptr = 8;
-        self.data[self.here_ptr] = 17;
+        self.data[self.here_ptr] = 13;
 
-        /*         self.base_ptr = self.make_variable("base");
-               self.data[self.base_ptr] = 10;
-               self.tmp_ptr = self.make_variable("tmp");
-               self.tib_in_ptr = self.make_variable(">in");
-               self.data[self.tib_in_ptr as usize] = TIB_START as i32;
-               self.hld_ptr = self.make_variable("hld");
+        self.base_ptr = self.make_variable("base");
+        //self.tmp_ptr = self.make_variable("tmp");
+        self.tib_in_ptr = self.make_variable(">in");
+        self.data[self.tib_in_ptr as usize] = TIB_START as i64;
+        //self.hld_ptr = self.make_variable("hld");
 
-               self.last_ptr = self.make_variable("last");
-               self.data[self.here_ptr] as usize
-        */
+        self.last_ptr = self.make_variable("last");
+    }
+
+    fn write_string(&mut self, string: &str) -> usize {
+        // place a str into string space and update the free pointer string_ptr
+        let mut ptr = self.data[self.string_ptr] as usize;
+        let result_ptr = ptr;
+        self.strings[ptr] = string.len() as u8 as char;
+        ptr += 1;
+        for (i, c) in string.chars().enumerate() {
+            self.strings[ptr + i] = c;
+        }
+        self.data[self.string_ptr] = (ptr + string.len()) as i64;
+        result_ptr
+    }
+
+    fn make_variable(&mut self, name: &str) -> usize {
+        // Create a variable, returning the address and updating the data_ptr
+        // build the header for a variable
+        let variable_ptr = self.make_word(&name, &[VARIABLE, 0]); // install the name
+        variable_ptr
+    }
+
+    fn make_constant(&mut self, name: &str, val: i64) -> usize {
+        // Create a constant
+        // build the header for a constant
+        let const_ptr = self.make_word(name, &[val]); // install the name
+        const_ptr
+    }
+
+    fn make_word(&mut self, name: &str, args: &[i64]) -> usize {
+        // install a new word with provided name and arguments
+        // back link is already in place
+        // place it HERE
+        // update HERE and LAST
+        // return HERE
+        let back = self.data[self.here_ptr] as usize - 1; // the top-of-stack back pointer's location
+        let mut ptr = back + 1;
+        self.data[ptr] = self.write_string(name) as i64;
+        for val in args {
+            ptr += 1;
+            self.data[ptr] = *val;
+        }
+        ptr += 1;
+        self.data[ptr] = back as i64; // the new back pointer
+        self.data[self.here_ptr] = ptr as i64 + 1; // top of the stack = HERE
+        self.data[self.context_ptr] = back as i64 + 1; // context is the name_pointer field of this word
+        back + 2 // address of first parameter field
     }
 
     fn f_insert_variable(&mut self) {}
@@ -94,10 +145,30 @@ impl TF {
         self.builtins
             .push(BuiltInFn::new(name.to_owned(), code, doc.to_string()));
         // now build the DATA space record
+        self.make_word(name, &[BUILTIN, self.builtins.len() as i64 - 1]);
     }
 
+    fn i_builtin(&mut self) {}
+    fn i_variable(&mut self) {}
+    fn i_constant(&mut self) {}
+    fn i_literal(&mut self) {}
+    fn i_string(&mut self) {}
+    fn i_definition(&mut self) {}
+
     pub fn add_builtins(&mut self) {
-        // add the builtins to the builtin dictionary
+        // add the inner interpreters to the builtin dictionary
+        self.add("i_builtin", TF::i_builtin, "inner interpreter: builtin");
+        self.add("i_variable", TF::i_variable, "inner interpreter: variablek");
+        self.add("i_constant", TF::i_constant, "inner interpreter: constant");
+        self.add("i_literal", TF::i_literal, "inner interpreter: literal");
+        self.add("i_string", TF::i_string, "inner interpreter: string");
+        self.add(
+            "i_definition",
+            TF::i_definition,
+            "inner interpreter: definition",
+        );
+
+        // add standard builtin functions to the dictionary
         self.add("+", TF::f_plus, "+ ( j k -- j+k ) Push j+k on the stack");
         self.add("-", TF::f_minus, "- ( j k -- j+k ) Push j-k on the stack");
         self.add("*", TF::f_times, "* ( j k -- j-k ) Push  -k on the stack");
@@ -630,8 +701,19 @@ impl TF {
             None => self.stack.push(0),
         }
     }
+    fn f_key(&mut self) {
+        // get a character and push on the stack
+        let c = self.parser.reader.read_char();
+        match c {
+            Some(c) => self.stack.push(c as i64),
+            None => self
+                .msg
+                .error("KEY", "unable to get char from input stream", None::<bool>),
+        }
+    }
     fn f_accept(&mut self) {
-        // get a new line of input and initialize the pointer variable
+        // get a new line of input and initialize the pointer variables
+        // TIB is an unpacked (Rust) string
         match self.stack.pop() {
             Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
                 Some(mut line) => {
@@ -700,6 +782,16 @@ impl TF {
         self.stack.push(' ' as i64);
         self.f_text(); // gets the string
     }
+    /*  fn f_d_pack(&mut self) {
+        // pack the string in PAD and place it in the dictionary for a new word
+        let data = self.f_string_at(addr);
+        let packed = self.pack_string(&data);
+        for c in packed {
+            let here = self.data[self.here_ptr];
+            self.data[]
+        }
+    }
+    */
     fn f_see_all(&mut self) {
         for i in 0..self.dictionary.len() {
             self.see_word(i);
@@ -707,15 +799,6 @@ impl TF {
     }
     fn f_stack_depth(&mut self) {
         self.stack.push(self.stack.len() as i64);
-    }
-    fn f_key(&mut self) {
-        let c = self.parser.reader.read_char();
-        match c {
-            Some(c) => self.stack.push(c as i64),
-            None => self
-                .msg
-                .error("KEY", "unable to get char from input stream", None::<bool>),
-        }
     }
     fn f_r_w(&mut self) {
         self.file_mode = FileMode::ReadWrite;
