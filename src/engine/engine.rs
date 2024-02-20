@@ -127,33 +127,28 @@ impl TF {
         // take delimiter from stack; grab string from TIB
         // need to check if TIB is empty
         // if delimiter = 1, get the rest of the TIB
-        match self.stack.pop() {
-            Some(d) => {
-                let delim = d as u8;
-                let in_p = self.get_var(self.tib_in_ptr);
-                let mut i = in_p as usize;
-                let mut j = i;
-                let line = &self.get_string_var(self.tib_ptr);
-                if delim as u8 == 1 {
-                    // get the rest of the line by setting j to the end
-                    j = self.get_var(self.tib_size_ptr) as usize;
-                } else {
-                    while i < line.len() && line.as_bytes()[i] == delim {
-                        // skip leading delims
-                        i += 1;
-                    }
-                    j = i;
-                    while j < line.len() && line.as_bytes()[j] != delim {
-                        j += 1;
-                    }
+        if stack_ok!(1) {
+            let delim = pop!() as u8;
+            let in_p = self.get_var(self.tib_in_ptr);
+            let mut i = in_p as usize;
+            let mut j = i;
+            let line = &self.get_string_var(self.tib_ptr);
+            if delim as u8 == 1 {
+                // get the rest of the line by setting j to the end
+                j = self.get_var(self.tib_size_ptr) as usize;
+            } else {
+                while i < line.len() && line.as_bytes()[i] == delim {
+                    // skip leading delims
+                    i += 1;
                 }
-                self.set_var(self.tib_in_ptr, j as i64);
-                let token = line[i..j].to_owned(); // does not include j!
-                self.set_string_var(self.pad_ptr, token.as_str());
+                j = i;
+                while j < line.len() && line.as_bytes()[j] != delim {
+                    j += 1;
+                }
             }
-            None => self
-                .msg
-                .error("TEXT", "No delimiter on stack", None::<bool>), // stack was empty! error
+            self.set_var(self.tib_in_ptr, j as i64);
+            let token = line[i..j].to_owned(); // does not include j!
+            self.set_string_var(self.pad_ptr, token.as_str());
         }
     }
 

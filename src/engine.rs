@@ -65,7 +65,7 @@ pub struct TF {
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
     return_stack: Vec<i64>,           // for do loops etc.
     here_ptr: usize,
-    stack_ptr: usize,
+    stack_ptr: usize, // top of the linear space stack
     context_ptr: usize,
     base_ptr: usize,
     pad_ptr: usize,    // the current s".."" string
