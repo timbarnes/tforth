@@ -51,7 +51,7 @@ macro_rules! pop1 {
 }
 
 impl TF {
-    pub fn f_insert_variables(&mut self) {
+    pub fn u_insert_variables(&mut self) {
         // install system variables in data area
         // hand craft S-HERE (free string pointer) so write_string() can work
         self.data[0] = 0;
@@ -87,6 +87,11 @@ impl TF {
         //self.hld_ptr = self.make_variable("hld");
 
         self.last_ptr = self.make_variable("last");
+    }
+
+    /// Insert Forth code into the dictionary
+    pub fn u_insert_code(&mut self) {
+        self.u_interpret("2 2 + .");
     }
 
     fn write_string(&mut self, string: &str) -> usize {

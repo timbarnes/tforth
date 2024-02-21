@@ -89,8 +89,8 @@ impl TF {
         }
     }
 
+    /// INTERPRET ( -- ) Interprets a line of tokens from TIB
     pub fn f_interpret(&mut self) {
-        // process a line of tokens
         loop {
             if self.get_var(self.tib_in_ptr) >= self.get_var(self.tib_size_ptr) {
                 // no more tokens on this line
@@ -235,6 +235,14 @@ impl TF {
         }
     }
     */
+
+    /// u_interpret executes a line of code in the new interpreter
+    pub fn u_interpret(&mut self, line: &str) {
+        // put it in TIB and call interpret?
+        self.u_save_string(line, self.tib_ptr, line.len());
+        self.f_interpret();
+    }
+
     /// Return a string slice from a Forth string address
     fn u_get_string_var(&mut self, addr: usize) -> String {
         let str_addr = addr & ADDRESS_MASK;
@@ -246,12 +254,20 @@ impl TF {
         result
     }
 
-    /// copy a string from a text buffer to a new counted string
+    /// copy a string from a text buffer to a counted string
     /// Typically used to copy to PAD from TIB
-    fn u_str_copy(&mut self, from: usize, to: usize, length: usize) {
+    pub fn u_str_copy(&mut self, from: usize, to: usize, length: usize) {
         self.strings[to] = length as u8 as char; // count byte
         for i in 0..(length - 1) {
             self.strings[to + i] = self.strings[from + i];
+        }
+    }
+
+    /// copy a string slice into string space as a counted string
+    pub fn u_save_string(&mut self, from: &str, to: usize, length: usize) {
+        self.strings[to] = length as u8 as char; // count byte
+        for (i, c) in from.chars().enumerate() {
+            self.strings[i] = c;
         }
     }
 }

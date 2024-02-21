@@ -86,15 +86,11 @@ impl TF {
             let dest = pop!(self) as usize;
             let max_len = top!(self);
             match self.parser.reader.get_line(&"".to_owned(), false) {
-                Some(mut line) => {
+                Some(line) => {
                     let length = min(line.len() - 1, max_len as usize) as usize;
-                    line = line[..length].to_string();
+                    let line_str = &line[..length];
                     let length = line.len();
-                    self.strings[dest] = length as u8 as char;
-                    let i = 1;
-                    for c in line.chars() {
-                        self.strings[dest + i] = c;
-                    }
+                    self.u_save_string(line_str, dest, length); // write a counted string
                     push!(self, length as i64);
                 }
                 None => {
@@ -104,25 +100,6 @@ impl TF {
                 }
             }
         }
-        /*  match self.stack.pop() {
-            Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
-                Some(mut line) => {
-                    let length = min(line.len() - 1, max_len as usize) as usize;
-                    line = line[..length].to_owned();
-                    self.set_string_var(self.tib_ptr, &line);
-                    self.set_var(self.tib_in_ptr, 0);
-                    self.set_var(self.tib_size_ptr, length as i64);
-                }
-                None => {
-                    self.msg
-                        .error("ACCEPT", "Unable to read from input", None::<bool>);
-                    self.f_abort();
-                }
-            },
-            None => self
-                .msg
-                .error("ACCEPT", "Required length not on stack", None::<bool>),
-        } */
     }
 
     pub fn f_query(&mut self) {

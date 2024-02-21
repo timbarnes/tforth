@@ -138,9 +138,10 @@ impl TF {
     }
 
     pub fn cold_start(&mut self) {
-        self.f_insert_variables();
+        self.u_insert_variables();
         //self.f_insert_builtins();
         self.add_builtins();
+        self.u_insert_code();
         self.add_variables();
     }
 
