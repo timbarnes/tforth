@@ -1,7 +1,7 @@
 // Compiler and Interpreter
 
-use crate::engine::{FALSE, STACK_START, TF, TRUE};
-use crate::tokenizer::is_integer;
+use crate::engine::{ADDRESS_MASK, FALSE, IMMEDIATE_MASK, STACK_START, TF, TRUE};
+use crate::tokenizer::u_is_integer;
 
 macro_rules! stack_ok {
     ($self:ident, $n: expr, $caller: expr) => {
@@ -33,10 +33,20 @@ macro_rules! push {
 }
 
 impl TF {
+    /// immediate - sets the immediate flag on the most recently defined word
+    /// Context pointer links to the most recent name field
+    pub fn f_immediate(&mut self) {
+        let mut mask = self.data[self.context_ptr] as usize;
+        mask |= IMMEDIATE_MASK;
+        self.data[self.context_ptr] = mask as i64;
+    }
+
+    /// [  Install $INTERPRET in 'EVAL
     pub fn f_lbracket(&mut self) {
         self.set_compile_mode(false);
     }
 
+    /// ]  Install $COMPILE in 'EVAL   
     pub fn f_rbracket(&mut self) {
         self.set_compile_mode(true);
     }
@@ -116,22 +126,22 @@ impl TF {
         }
     }
 
+    /// number? ( a -- n T | a F ) tests a string to see if it's a number;
+    /// leaves n and flag on the stack: true if number is ok.
     pub fn f_number_q(&mut self) {
-        // try to convert the number with string address on the stack
+        let buf_addr = pop!(self);
         let mut result = 0;
         let mut flag = 0;
-        match self.stack.pop() {
-            Some(addr) => {
-                let numtext = self.get_string_var(addr as usize);
-                if is_integer(numtext.as_str()) {
-                    result = numtext.parse().unwrap();
-                    flag = -1; // valid number
-                }
-            }
-            None => {}
+        let numtext = self.u_get_string_var(buf_addr as usize);
+        if u_is_integer(&numtext.as_str()) {
+            result = numtext.parse().unwrap();
+            flag = -1; // valid number
+            push!(self, result);
+            push!(self, TRUE);
+        } else {
+            push!(self, buf_addr);
+            push!(self, FALSE);
         }
-        self.stack.push(result);
-        self.stack.push(flag);
     }
 
     pub fn f_q_unique(&mut self) {
@@ -142,10 +152,11 @@ impl TF {
         }
     }
 
+    /// looks for a (postfix) word in the dictionary
+    /// places it's execution token / address on the stack
+    /// builtin addresses have been bumped up by 1000 to distinguish them
+    /// Pushes 0 if not found
     pub fn f_tick(&mut self) {
-        // looks for a (postfix) word in the dictionary
-        // places it's execution token / address on the stack
-        // builtin addresses have been bumped up by 1000 to distinguish them
         self.f_s_quote(); // gets a string and places it in PAD
                           // search the dictionary
         let token = self.get_string_var(self.pad_ptr);
@@ -155,32 +166,58 @@ impl TF {
         }
     }
 
-    pub fn f_text(&mut self) {
-        // take delimiter from stack; grab string from TIB
-        // need to check if TIB is empty
-        // if delimiter = 1, get the rest of the TIB
-        if stack_ok!(self, 1, "text") {
-            let delim = pop!(self) as u8;
-            let in_p = self.get_var(self.tib_in_ptr);
-            let mut i = in_p as usize;
+    /// (parse) - b u c -- b u delta )
+    /// Find a c-delimited token in the string buffer at b, buffer len u.
+    /// Return the pointer to the buffer, the length of the token,
+    /// and the offset from the start of the buffer to the start of the token.
+    pub fn f_parse_p(&mut self) {
+        if stack_ok!(self, 3, "(parse)") {
+            let delim = pop!(self) as u8 as char;
+            let buf_len = pop!(self);
+            let in_p = pop!(self);
+            // traverse the string, dropping leading delim characters
+            // in_p points *into* a string, so no count field
+            let start = in_p as usize + 1;
+            let end = start + buf_len as usize;
+            let mut i = start as usize;
             let mut j = i;
-            let line = &self.get_string_var(self.tib_ptr);
-            if delim as u8 == 1 {
-                // get the rest of the line by setting j to the end
-                j = self.get_var(self.tib_size_ptr) as usize;
-            } else {
-                while i < line.len() && line.as_bytes()[i] == delim {
-                    // skip leading delims
-                    i += 1;
-                }
-                j = i;
-                while j < line.len() && line.as_bytes()[j] != delim {
-                    j += 1;
-                }
+            while self.strings[i] == delim && i < end {
+                i += 1;
             }
-            self.set_var(self.tib_in_ptr, j as i64);
-            let token = line[i..j].to_owned(); // does not include j!
-            self.set_string_var(self.pad_ptr, token.as_str());
+            j = i;
+            while j < end && self.strings[j] != delim {
+                j += 1;
+            }
+            push!(self, in_p);
+            push!(self, (j - i) as i64);
+            push!(self, i as i64);
+        }
+    }
+
+    /// TEXT ( -- ) Get a space-delimited token from the TIB, place in PAD
+    pub fn f_text(&mut self) {
+        push!(self, ' ' as u8 as i64);
+        self.f_parse();
+    }
+
+    /// PARSE ( c -- b u ) Get a c-delimited token from TIB, and return counted string in PAD
+    /// need to check if TIB is empty
+    /// if delimiter = 1, get the rest of the TIB
+    pub fn f_parse(&mut self) {
+        if stack_ok!(self, 1, "parse") {
+            push!(self, (self.tib_in_ptr + self.tib_in_ptr) as i64);
+            push!(self, (self.tib_size_ptr - self.tib_in_ptr) as i64);
+            push!(self, ' ' as u8 as i64);
+            self.f_parse_p();
+            // check length, and copy to PAD if a token was found
+            let delta = pop!(self);
+            let length = pop!(self);
+            let addr = pop!(self);
+            if length > 0 {
+                // copy to pad
+                self.u_str_copy((addr + delta) as usize, self.pad_ptr, length as usize);
+            }
+            self.tib_in_ptr += length as usize;
         }
     }
 
@@ -198,4 +235,23 @@ impl TF {
         }
     }
     */
+    /// Return a string slice from a Forth string address
+    fn u_get_string_var(&mut self, addr: usize) -> String {
+        let str_addr = addr & ADDRESS_MASK;
+        let last = str_addr + self.strings[str_addr] as usize;
+        let mut result = String::new();
+        for i in str_addr..last {
+            result.push(self.strings[i] as char);
+        }
+        result
+    }
+
+    /// copy a string from a text buffer to a new counted string
+    /// Typically used to copy to PAD from TIB
+    fn u_str_copy(&mut self, from: usize, to: usize, length: usize) {
+        self.strings[to] = length as u8 as char; // count byte
+        for i in 0..(length - 1) {
+            self.strings[to + i] = self.strings[from + i];
+        }
+    }
 }

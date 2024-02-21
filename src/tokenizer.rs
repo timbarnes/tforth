@@ -73,7 +73,7 @@ impl Tokenizer {
                 None
             }
             Some(text) => {
-                if is_integer(&text) {
+                if u_is_integer(&text) {
                     Some(ForthToken::Integer(text.parse().unwrap()))
                 } else if is_float(&text) {
                     Some(ForthToken::Float(text.parse().unwrap()))
@@ -183,7 +183,7 @@ impl Tokenizer {
     }
 }
 
-pub fn is_integer(s: &str) -> bool {
+pub fn u_is_integer(s: &str) -> bool {
     s.parse::<i64>().is_ok()
 }
 

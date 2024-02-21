@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crate::internals::builtin::BuiltInFn;
-use crate::internals::compiler::*;
+// use crate::internals::compiler::*;
 use crate::messages::Msg;
 use crate::reader::Reader;
 use crate::tokenizer::{ForthToken, Tokenizer};
@@ -20,6 +20,8 @@ pub const RET_START: usize = STACK_START - 1; // return stack counts downwards
 pub const WORD_START: usize = 0; // data area counts up from the bottom (builtins, words, variables etc.)
 pub const TRUE: i64 = -1; // forth convention for true and false
 pub const FALSE: i64 = 0;
+pub const ADDRESS_MASK: usize = 0x00FFFFFFFFFFFFFF; // to get rid of the immediate flag
+pub const IMMEDIATE_MASK: usize = 0x4000000000000000; // the immediate bit
 
 // Indices into builtins to drive execution of each data type
 pub const BUILTIN: i64 = 0;
@@ -28,9 +30,6 @@ pub const CONSTANT: i64 = 2;
 pub const LITERAL: i64 = 3;
 pub const STRING: i64 = 4;
 pub const DEFINITION: i64 = 5;
-
-const IMMEDIATE: u32 = 1 << 26;
-const LEN_MASK: u32 = 0xFFFFFFF;
 
 #[derive(Clone, Debug)]
 pub enum OpCode {

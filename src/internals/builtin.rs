@@ -328,6 +328,11 @@ impl TF {
             TF::f_r_get,
             "r@ ( -- n ) Push the value on the top of the return stack to the calculation stack",
         );
+        self.add(
+            "immediate",
+            TF::f_immediate,
+            "immediate sets the immediate flag on the most recently defined word",
+        );
         self.add("[", TF::f_lbracket, "[ ( -- ) Exit compile mode");
         self.add("]", TF::f_rbracket, "] ( -- ) Enter compile mode");
         self.add(
@@ -348,7 +353,7 @@ impl TF {
         self.add(
             "number?",
             TF::f_number_q,
-            "number?: tests a string to see if it's a number;
+            "number? ( a -- n T | a F ) tests a string to see if it's a number;
             leaves n and flag on the stack: true if number is ok.",
         );
         self.add(
@@ -361,8 +366,33 @@ impl TF {
             TF::f_tick,
             "' (tick): searches the dictionary for a (postfix) word",
         );
-        self.add("accept", TF::f_accept, "");
-        self.add("text", TF::f_text, "");
+        self.add(
+            "query",
+            TF::f_query,
+            "query ( -- ) Read a line from the console into TIB",
+        );
+        self.add(
+            "accept",
+            TF::f_accept,
+            "accept ( b l1 -- b l2 ) Read up to l1 characters into the buffer at b.
+        Return the pointer to the buffer and the actual number of characters read.",
+        );
+        self.add(
+            "text",
+            TF::f_text,
+            "TEXT ( -- ) Get a space-delimited token from the TIB, place in PAD",
+        );
+        self.add(
+            "parse",
+            TF::f_text,
+            "PARSE ( c -- b u ) Get a c-delimited token from TIB, 
+        and return counted string in PAD",
+        );
+        self.add(
+            "(parse)",
+            TF::f_text,
+            "(parse) - b u c -- b u delta ) return the location of a delimited token in string space",
+        );
         self.add(
             "type",
             TF::f_type,
