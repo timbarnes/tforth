@@ -8,6 +8,10 @@ use crate::messages::DebugLevel;
 use crate::tokenizer::{is_integer, ForthToken};
 use std::cmp::min;
 use std::io::{self, Write};
+use console::*;
+use inner::*;
+use general::*;
+use debug::*;
 
 pub trait BuiltinCall {
     fn call(&mut self);
@@ -389,6 +393,7 @@ impl TF {
         self.tib_size_ptr = self.add_variable("#tib", 0); // length of text input buffer
         self.tib_in_ptr = self.add_variable(">in", 0); // current position in input buffer
         self.pad_ptr = self.add_string_var("pad", "");
+        self.eval_ptr = self.add_variable("'eval", 0);
     }
 
     fn add_variable(&mut self, name: &str, val: i64) -> usize {
