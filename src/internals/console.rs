@@ -1,36 +1,71 @@
 /// Input-output words
+use crate::engine::{FileMode, BUF_SIZE, STACK_START, TF};
+use std::cmp::min;
+use std::io::{self, Write};
+
+macro_rules! stack_ok {
+    ($self:ident, $n: expr, $caller: expr) => {
+        if $self.stack_ptr <= STACK_START - $n {
+            true
+        } else {
+            $self.msg.error($caller, "Stack underflow", None::<bool>);
+            $self.f_abort();
+            false
+        }
+    };
+}
+macro_rules! stack_ok {
+    ($self:ident, $n: expr, $caller: expr) => {
+        if $self.stack_ptr <= STACK_START - $n {
+            true
+        } else {
+            $self.msg.error($caller, "Stack underflow", None::<bool>);
+            $self.f_abort();
+            false
+        }
+    };
+}
+macro_rules! pop {
+    ($self:ident) => {{
+        $self.stack_ptr += 1;
+        $self.data[$self.stack_ptr - 1]
+    }};
+}
+macro_rules! top {
+    ($self:ident) => {{
+        $self.data[$self.stack_ptr]
+    }};
+}
+macro_rules! push {
+    ($self:ident, $val:expr) => {
+        $self.stack_ptr -= 1;
+        $self.data[$self.stack_ptr] = $val;
+    };
+}
+macro_rules! pop1_push1 {
+    // Helper macro
+    ($self:ident, $word:expr, $expression:expr) => {
+        if let Some(x) = $self.pop_one(&$word) {
+            $self.stack.push($expression(x));
+        }
+    };
+}
+macro_rules! pop1 {
+    ($self:ident, $word:expr, $code:expr) => {{
+        if let Some(x) = $self.pop_one(&$word) {
+            $code(x)
+        }
+    }};
+}
 
 impl TF {
     /// macros:
     ///
     /// pop! attempts to take one element off the computation stack,
     ///      calling abort if underflow
-    /// 
-    macro_rules! stack_ok {
-        (n: usize, caller: &str) => {
-            if self.stack_ptr <= STACK_START - n {
-                true
-            } else {
-                self.msg.error({caller}, "Stack underflow", None::<bool>);
-                self.abort();
-                false
-            }
-        }
-    }
-    macro_rules! pop {
-        () => {
-            self.data_ptr += 1;
-            self.data[self.stack_ptr - 1]
-        }
-    }
-    macro_rules! top {
-        () => {
-            self.data[self.stack_ptr]
-        }
-    }
+    ///
 
-
-    fn f_key(&mut self) {
+    pub fn f_key(&mut self) {
         // get a character and push on the stack
         let c = self.parser.reader.read_char();
         match c {
@@ -46,20 +81,21 @@ impl TF {
     /// Read up to u characters, storing them at string address b.
     /// Return the start of the string, and the number of characters read.
     ///
-    fn f_accept(&mut self) {
-        if stack_ok!(2, "accept") {
-            let dest = pop!();
-            let max_len = top!();
-            match self.parser.get_line(&"".to_owned(), false) {
+    pub fn f_accept(&mut self) {
+        if stack_ok!(self, 2, "accept") {
+            let dest = pop!(self) as usize;
+            let max_len = top!(self);
+            match self.parser.reader.get_line(&"".to_owned(), false) {
                 Some(mut line) => {
                     let length = min(line.len() - 1, max_len as usize) as usize;
-                    line = line[..length];
-                    self.strings[dest] = line.len();
+                    line = line[..length].to_string();
+                    let length = line.len();
+                    self.strings[dest] = length as u8 as char;
                     let i = 1;
                     for c in line.chars() {
                         self.strings[dest + i] = c;
                     }
-                    push!(line.len());
+                    push!(self, length as i64);
                 }
                 None => {
                     self.msg
@@ -68,7 +104,7 @@ impl TF {
                 }
             }
         }
-       /*  match self.stack.pop() {
+        /*  match self.stack.pop() {
             Some(max_len) => match self.parser.reader.get_line(&"".to_owned(), false) {
                 Some(mut line) => {
                     let length = min(line.len() - 1, max_len as usize) as usize;
@@ -89,26 +125,26 @@ impl TF {
         } */
     }
 
-    fn f_query(&mut self) {
-        push!(self.tib_ptr);
-        push!(BUF_SIZE);
+    pub fn f_query(&mut self) {
+        push!(self, self.tib_ptr as i64);
+        push!(self, BUF_SIZE as i64);
         self.f_accept();
     }
 
     // output
 
-    fn i_emit(&mut self) {
-        if stack_ok(1) {
-            let c = pop!();
+    pub fn i_emit(&mut self) {
+        if stack_ok!(self, 1, "emit") {
+            let c = pop!(self);
             if (0x20..=0x7f).contains(&c) {
-                print!("{}", n as u8 as char);
+                print!("{}", c as u8 as char);
             } else {
                 self.msg.error("EMIT", "Arg out of range", Some(c));
             }
         }
     }
 
-    fn f_emit(&mut self) {
+    pub fn f_emit(&mut self) {
         match self.stack.pop() {
             Some(n) => {
                 if (0x20..=0x7f).contains(&n) {
@@ -121,27 +157,27 @@ impl TF {
         }
     }
 
-    fn f_flush(&mut self) {
+    pub fn f_flush(&mut self) {
         io::stdout().flush().unwrap();
     }
 
-    fn f_dot(&mut self) {
+    pub fn f_dot(&mut self) {
         pop1!(self, ".", |a| print!("{a} "));
     }
 
-    fn f_dot_s(&mut self) {
+    pub fn f_dot_s(&mut self) {
         println!("{:?}", self.stack);
     }
 
-    fn f_cr(&mut self) {
+    pub fn f_cr(&mut self) {
         println!("");
     }
 
-    fn f_dot_s_quote(&mut self) {
+    pub fn f_dot_s_quote(&mut self) {
         print!("{:?}", self.get_string_var(self.pad_ptr));
     }
 
-    fn f_type(&mut self) {
+    pub fn f_type(&mut self) {
         // print a string, found via pointer on stack
         match self.stack.pop() {
             Some(addr) => {
@@ -154,13 +190,13 @@ impl TF {
 
     // file i/o
 
-    fn f_r_w(&mut self) {
+    pub fn f_r_w(&mut self) {
         self.file_mode = FileMode::ReadWrite;
     }
-    fn f_r_o(&mut self) {
+    pub fn f_r_o(&mut self) {
         self.file_mode = FileMode::ReadOnly;
     }
-    fn f_include_file(&mut self) {
+    pub fn f_include_file(&mut self) {
         self.loaded();
     }
 }

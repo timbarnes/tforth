@@ -3,15 +3,8 @@
 /// Set up a table of builtin functions, with names and code
 
 #[allow(dead_code)]
-use crate::engine::*;
-use crate::messages::DebugLevel;
-use crate::tokenizer::{is_integer, ForthToken};
-use std::cmp::min;
-use std::io::{self, Write};
-use console::*;
-use inner::*;
-use general::*;
-use debug::*;
+use crate::engine::{BUILTIN, STR_START, TF, TIB_START, VARIABLE};
+use crate::tokenizer::ForthToken;
 
 pub trait BuiltinCall {
     fn call(&mut self);
@@ -377,7 +370,7 @@ impl TF {
         );
     }
 
-    fn f_s_quote(&mut self) {
+    pub fn f_s_quote(&mut self) {
         // get a string and place it in PAD
         self.stack.push(' ' as i64);
         self.f_text(); // gets the string

@@ -1,11 +1,43 @@
 // Compiler and Interpreter
 
+use crate::engine::{FALSE, STACK_START, TF, TRUE};
+use crate::tokenizer::is_integer;
+
+macro_rules! stack_ok {
+    ($self:ident, $n: expr, $caller: expr) => {
+        if $self.stack_ptr <= STACK_START - $n {
+            true
+        } else {
+            $self.msg.error($caller, "Stack underflow", None::<bool>);
+            $self.f_abort();
+            false
+        }
+    };
+}
+macro_rules! pop {
+    ($self:ident) => {{
+        $self.stack_ptr += 1;
+        $self.data[$self.stack_ptr - 1]
+    }};
+}
+macro_rules! top {
+    ($self:ident) => {{
+        $self.data[$self.stack_ptr]
+    }};
+}
+macro_rules! push {
+    ($self:ident, $val:expr) => {
+        $self.stack_ptr -= 1;
+        $self.data[$self.stack_ptr] = $val;
+    };
+}
+
 impl TF {
-    fn f_lbracket(&mut self) {
+    pub fn f_lbracket(&mut self) {
         self.set_compile_mode(false);
     }
 
-    fn f_rbracket(&mut self) {
+    pub fn f_rbracket(&mut self) {
         self.set_compile_mode(true);
     }
 
@@ -33,7 +65,7 @@ impl TF {
         }
     }
 
-    fn f_execute(&mut self) {
+    pub fn f_execute(&mut self) {
         // execute a word with addr on the stack
         match self.stack.pop() {
             Some(addr) => {
@@ -47,7 +79,7 @@ impl TF {
         }
     }
 
-    fn f_interpret(&mut self) {
+    pub fn f_interpret(&mut self) {
         // process a line of tokens
         loop {
             if self.get_var(self.tib_in_ptr) >= self.get_var(self.tib_size_ptr) {
@@ -84,7 +116,7 @@ impl TF {
         }
     }
 
-    fn f_number_q(&mut self) {
+    pub fn f_number_q(&mut self) {
         // try to convert the number with string address on the stack
         let mut result = 0;
         let mut flag = 0;
@@ -102,7 +134,7 @@ impl TF {
         self.stack.push(flag);
     }
 
-    fn f_q_unique(&mut self) {
+    pub fn f_q_unique(&mut self) {
         // see if a word is unique. Result boolean on stack
         match self.stack.pop() {
             Some(v) => self.stack.push(TRUE),
@@ -110,7 +142,7 @@ impl TF {
         }
     }
 
-    fn f_tick(&mut self) {
+    pub fn f_tick(&mut self) {
         // looks for a (postfix) word in the dictionary
         // places it's execution token / address on the stack
         // builtin addresses have been bumped up by 1000 to distinguish them
@@ -123,12 +155,12 @@ impl TF {
         }
     }
 
-    fn f_text(&mut self) {
+    pub fn f_text(&mut self) {
         // take delimiter from stack; grab string from TIB
         // need to check if TIB is empty
         // if delimiter = 1, get the rest of the TIB
-        if stack_ok!(1) {
-            let delim = pop!() as u8;
+        if stack_ok!(self, 1, "text") {
+            let delim = pop!(self) as u8;
             let in_p = self.get_var(self.tib_in_ptr);
             let mut i = in_p as usize;
             let mut j = i;
@@ -152,7 +184,7 @@ impl TF {
         }
     }
 
-    fn f_colon(&mut self) {
+    pub fn f_colon(&mut self) {
         self.set_compile_mode(true);
     }
 

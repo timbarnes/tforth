@@ -6,6 +6,7 @@ mod engine;
 mod messages;
 mod reader;
 mod tokenizer;
+mod internals;
 
 use config::Config;
 

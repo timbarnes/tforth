@@ -1,25 +1,23 @@
 //The tForth interpreter struct and implementation
-
-mod builtin;
-
 use std::collections::HashMap;
 use std::io::{self, Write};
 
+use crate::internals::builtin::BuiltInFn;
+use crate::internals::compiler::*;
 use crate::messages::Msg;
 use crate::reader::Reader;
 use crate::tokenizer::{ForthToken, Tokenizer};
-use builtin::BuiltInFn;
 
-const DATA_SIZE: usize = 10000;
-const STRING_SIZE: usize = 5000;
-const BUF_SIZE: usize = 132;
-const TIB_START: usize = 0;
-const PAD_START: usize = TIB_START + BUF_SIZE;
-const STR_START: usize = PAD_START + BUF_SIZE;
-const ALLOC_START: usize = PAD_START + BUF_SIZE;
-const STACK_START: usize = DATA_SIZE / 2; // stack counts up
-const RET_START: usize = STACK_START - 1; // return stack counts downwards
-const WORD_START: usize = 0; // data area counts up from the bottom (builtins, words, variables etc.)
+pub const DATA_SIZE: usize = 10000;
+pub const STRING_SIZE: usize = 5000;
+pub const BUF_SIZE: usize = 132;
+pub const TIB_START: usize = 0;
+pub const PAD_START: usize = TIB_START + BUF_SIZE;
+pub const STR_START: usize = PAD_START + BUF_SIZE;
+pub const ALLOC_START: usize = PAD_START + BUF_SIZE;
+pub const STACK_START: usize = DATA_SIZE / 2; // stack counts up
+pub const RET_START: usize = STACK_START - 1; // return stack counts downwards
+pub const WORD_START: usize = 0; // data area counts up from the bottom (builtins, words, variables etc.)
 pub const TRUE: i64 = -1; // forth convention for true and false
 pub const FALSE: i64 = 0;
 
@@ -32,7 +30,7 @@ pub const STRING: i64 = 4;
 pub const DEFINITION: i64 = 5;
 
 const IMMEDIATE: u32 = 1 << 26;
-const LEN_MASK: u32 = 0xFFF;
+const LEN_MASK: u32 = 0xFFFFFFF;
 
 #[derive(Clone, Debug)]
 pub enum OpCode {
@@ -63,29 +61,30 @@ pub struct TF {
     pub builtins: Vec<BuiltInFn>,     // the dictionary of builtins
     pub defined_variables: HashMap<String, i64>, // separate hashmap for variables
     pub defined_constants: HashMap<String, i64>, // separate hashmap for constants
-    return_stack: Vec<i64>,           // for do loops etc.
-    here_ptr: usize,
-    stack_ptr: usize, // top of the linear space stack
-    context_ptr: usize,
-    base_ptr: usize,
-    pad_ptr: usize,    // the current s".."" string
-    string_ptr: usize, // points to the beginning of free string space
-    last_ptr: usize,   // points to name of top word
-    file_mode: FileMode,
-    compile_ptr: usize, // true if compiling a word
-    pc_ptr: usize,      // program counter
-    abort_ptr: usize,   // true if abort has been called
-    tib_ptr: usize,     // TIB
-    tib_size_ptr: usize,
-    tib_in_ptr: usize,
+    pub return_stack: Vec<i64>,       // for do loops etc.
+    pub here_ptr: usize,
+    pub stack_ptr: usize, // top of the linear space stack
+    pub context_ptr: usize,
+    pub eval_ptr: usize, // used to turn compile mode on and off
+    pub base_ptr: usize,
+    pub pad_ptr: usize,    // the current s".."" string
+    pub string_ptr: usize, // points to the beginning of free string space
+    pub last_ptr: usize,   // points to name of top word
+    pub file_mode: FileMode,
+    pub compile_ptr: usize, // true if compiling a word
+    pub pc_ptr: usize,      // program counter
+    pub abort_ptr: usize,   // true if abort has been called
+    pub tib_ptr: usize,     // TIB
+    pub tib_size_ptr: usize,
+    pub tib_in_ptr: usize,
     exit_flag: bool, // set when the "bye" word is executed.
     pub msg: Msg,
-    parser: Tokenizer,
+    pub parser: Tokenizer,
     new_word_name: String,
     new_word_definition: Vec<OpCode>,
     token_ptr: (usize, ForthToken),
-    show_stack: bool, // show the stack at the completion of a line of interaction
-    step_mode: bool,
+    pub show_stack: bool, // show the stack at the completion of a line of interaction
+    pub step_mode: bool,
 }
 
 #[derive(Debug)]
@@ -114,6 +113,7 @@ impl TF {
                 stack_ptr: STACK_START,
                 string_ptr: 0,
                 context_ptr: 0,
+                eval_ptr: 0,
                 base_ptr: 0,
                 pad_ptr: 0,
                 last_ptr: 0,
@@ -152,7 +152,7 @@ impl TF {
             true
         }
     }
-    fn set_compile_mode(&mut self, value: bool) {
+    pub fn set_compile_mode(&mut self, value: bool) {
         self.set_var(self.compile_ptr, if value { -1 } else { 0 });
     }
 
@@ -167,7 +167,7 @@ impl TF {
         }
     }
 
-    fn set_program_counter(&mut self, val: usize) {
+    pub fn set_program_counter(&mut self, val: usize) {
         self.set_var(self.pc_ptr, val as i64);
     }
     fn get_program_counter(&mut self) -> usize {
@@ -182,7 +182,7 @@ impl TF {
         self.set_var(self.pc_ptr, (new) as i64);
     }
 
-    fn set_exit_flag(&mut self) {
+    pub fn set_exit_flag(&mut self) {
         // Method executed by "bye"
         self.exit_flag = true;
     }
@@ -192,7 +192,7 @@ impl TF {
         self.exit_flag
     }
 
-    fn stack_underflow(&self, op: &str, n: usize) -> bool {
+    pub fn stack_underflow(&self, op: &str, n: usize) -> bool {
         if self.stack.len() < n {
             self.msg.error(op, "Stack underflow", None::<bool>);
             true
@@ -201,7 +201,7 @@ impl TF {
         }
     }
 
-    fn pop_one(&mut self, word: &str) -> Option<i64> {
+    pub fn pop_one(&mut self, word: &str) -> Option<i64> {
         match self.stack.pop() {
             Some(value) => Some(value),
             None => {
@@ -211,7 +211,7 @@ impl TF {
         }
     }
 
-    fn pop_two(&mut self, word: &str) -> Option<(i64, i64)> {
+    pub fn pop_two(&mut self, word: &str) -> Option<(i64, i64)> {
         let (val1, val2) = (self.stack.pop(), self.stack.pop());
         match val1 {
             Some(value1) => match val2 {
@@ -472,7 +472,7 @@ impl TF {
         }
     }
 
-    fn execute_word(&mut self, index: usize) {
+    pub fn execute_word(&mut self, index: usize) {
         // executes the code part of a word at index
         if let ForthToken::Definition(_, code) = self.dictionary[index].clone() {
             let pc = self.get_program_counter() as i64;
@@ -498,7 +498,7 @@ impl TF {
         }
     }
 
-    fn execute_opcode(&mut self, op_code: &OpCode) {
+    pub fn execute_opcode(&mut self, op_code: &OpCode) {
         // run a single opcode, updating the PC if required
         self.increment_program_counter(1);
         match op_code {
@@ -551,7 +551,7 @@ impl TF {
         }
     }
 
-    fn execute_builtin(&mut self, code: usize) {
+    pub fn execute_builtin(&mut self, code: usize) {
         let op = &self.builtins[code];
         let func = op.code;
         func(self);
@@ -599,7 +599,7 @@ impl TF {
         }
     }
 
-    fn loaded(&mut self) {
+    pub fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
         let file_name = self.get_string_var(self.pad_ptr);
@@ -640,7 +640,7 @@ impl TF {
         None
     }
 
-    fn find(&self, name: &str) -> Option<usize> {
+    pub fn find(&self, name: &str) -> Option<usize> {
         // find a word if it's defined; search from the newest to the oldest
         match self.find_definition(name) {
             Some(idx) => return Some(idx),
@@ -653,7 +653,7 @@ impl TF {
         None
     }
 
-    fn see_word(&self, index: usize) {
+    pub fn see_word(&self, index: usize) {
         // soon adding variables and constants
         if index < 1000 {
             // it's a definition
@@ -765,7 +765,7 @@ impl TF {
         }
     }
 
-    pub fn pack_string(&self, input: &str) -> Vec<usize> {
+    /* pub fn pack_string(&self, input: &str) -> Vec<usize> {
         // tries to pack a string
         let mut output = Vec::new();
         let mut tmp = input.len();
@@ -789,5 +789,5 @@ impl TF {
         output.push(tmp);
         //println!("Finished packing");
         output
-    }
+    } */
 }
