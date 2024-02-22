@@ -287,7 +287,7 @@ impl TF {
     }
 
     /// Return a string slice from a Forth string address
-    fn u_get_string(&mut self, addr: usize) -> String {
+    pub fn u_get_string(&mut self, addr: usize) -> String {
         let str_addr = addr & ADDRESS_MASK;
         let last = str_addr + self.strings[str_addr] as usize;
         let mut result = String::new();

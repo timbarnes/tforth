@@ -160,14 +160,12 @@ impl TF {
         print!("{:?}", self.get_string(self.pad_ptr));
     }
 
+    /// TYPE - print a string, using the string address on the stack
     pub fn f_type(&mut self) {
-        // print a string, found via pointer on stack
-        match self.stack.pop() {
-            Some(addr) => {
-                let text = self.get_string(addr as usize);
-                print!("{text}");
-            }
-            None => {}
+        if stack_ok!(self, 1, "type") {
+            let addr = pop!(self) as usize;
+            let text = self.u_get_string(addr);
+            print!("{text}");
         }
     }
 

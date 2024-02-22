@@ -421,6 +421,11 @@ impl TF {
             "(parse) - b u c -- b u delta ) return the location of a delimited token in string space",
         );
         self.add(
+            "s\"",
+            TF::f_s_quote,
+            "s\" Place the following string in the PAD",
+        );
+        self.add(
             "type",
             TF::f_type,
             "type: print a string using pointer on stack",
