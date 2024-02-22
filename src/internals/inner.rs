@@ -27,43 +27,48 @@ impl TF {
     ///
     ///    [ index of i_builtin ] [ index of builtin ] in a compiled word
     ///
-    pub fn i_builtin(&mut self, id: i64) {}
+    pub fn i_builtin(&mut self, code: i64) {
+        let index = self.data[code as usize] as usize;
+        let op = &self.builtins[index];
+        let func = op.code;
+        func(self);
+    }
 
     /// Places the address of the adjacent variable on the stack
     ///
     ///    [ index of i_variable ] [ index of builtin ] in a compiled word
     ///
-    pub fn i_variable(&mut self, d: i64) {
-        push!(self, d);
+    pub fn i_variable(&mut self, val: i64) {
+        push!(self, val + 1); // address of the value
     }
 
     /// Places the value of the adjacent constant on the stack
     ///
     ///    [ index of i_constant ] [ constant value ] in a compiled word
     ///
-    pub fn i_constant(&mut self, d: i64) {
-        push!(self, self.data[d as usize]);
+    pub fn i_constant(&mut self, val: i64) {
+        push!(self, self.data[val as usize + 1]);
     }
 
     /// Places the number in data[d] on the stack
     ///
     ///    [ index of i_literal ] [ number ] in a compiled word
     ///
-    pub fn i_literal(&mut self, d: i64) {
-        push!(self, self.data[d as usize]);
+    pub fn i_literal(&mut self, lit: i64) {
+        push!(self, self.data[lit as usize + 1]);
     }
 
     /// Places the address (in string space) of the adjacent string on the stack
     ///
     ///    [ i_string ] [ index into string space ] in a compiled word
     ///
-    pub fn i_string(&mut self, d: i64) {
-        push!(self, d);
+    pub fn i_string(&mut self, ptr: i64) {
+        push!(self, ptr + 1);
     }
 
     /// Loops through the adjacent definition, running their inner interpreters
     ///
     ///    [ index of i_definition ] [ sequence of compiled words ]
     ///
-    pub fn i_definition(&mut self, d: i64) {}
+    pub fn i_definition(&mut self, def: i64) {}
 }

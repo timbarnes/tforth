@@ -19,8 +19,10 @@ macro_rules! stack_ok {
 }
 macro_rules! pop {
     ($self:ident) => {{
+        let r = $self.data[$self.stack_ptr];
+        $self.data[$self.stack_ptr] = 999999;
         $self.stack_ptr += 1;
-        $self.data[$self.stack_ptr - 1]
+        r
     }};
 }
 macro_rules! top {
@@ -83,7 +85,7 @@ impl TF {
         if stack_ok!(self, 1, "execute") {
             // call the appropriate inner interpreter
             let xt = pop!(self);
-            match xt {
+            match self.data[xt as usize] {
                 BUILTIN => self.i_builtin(xt + 1),
                 VARIABLE => self.i_variable(xt + 1),
                 CONSTANT => self.i_constant(xt + 1),
@@ -100,69 +102,60 @@ impl TF {
     /// INTERPRET ( -- ) Interprets a line of tokens from TIB
     pub fn f_interpret(&mut self) {
         loop {
-            self.f_parse(); // get a token
-            if pop!(self) != 0 {
-                // look it up and execute it
-                self.f_tick();
-                self.f_execute();
-            } else {
-                break;
-            }
-
-            if self.get_var(self.tib_in_ptr) >= self.get_var(self.tib_size_ptr) {
-                // no more tokens on this line
-                return;
-            } else {
-                self.f_tick(); // grabs the next word and searches the dict
-                match self.stack.pop() {
-                    Some(val) => {
-                        if val > 0 {
-                            self.stack.push(val);
-                            self.f_execute();
-                        } else {
-                            // it's not a word, but could be a number
-                            self.stack.push(self.pad_ptr as i64);
-                            self.f_number_q(); // tries to convert the pad string
-                            match self.stack.pop() {
-                                Some(b) => {
-                                    if b == 0 {
-                                        // forth false flag
-                                        let _ = self.stack.pop(); // wasn't a number
-                                    }
-                                } // number is on the stack
-                                None => {} // error condition
-                            }
-                        }
-                    }
-                    None => {
-                        self.f_abort();
-                        return;
+            self.f_text(); // get a token
+            if pop!(self) != FALSE {
+                let v = top!(self);
+                push!(self, v); // dup PAD address
+                self.f_find(); // this is the name pointer's location
+                               // if we found it, execute it
+                let addr = pop!(self); // get the address
+                if addr != 0 {
+                    push!(self, addr + 1); // the inner interpreter's address
+                    self.f_execute();
+                } else {
+                    // is it a number?
+                    self.f_number_q();
+                    if pop!(self) == FALSE {
+                        pop!(self); // lose the failed number
+                        let word = &self.u_get_string(self.pad_ptr);
+                        self.msg
+                            .warning("interpret", "token not recognized", Some(word));
+                        break;
                     }
                 }
             }
         }
     }
 
-    /// FIND (s -- a | F )
-    /// Search the dictionary for the token indexed through s. Return it's address or FALSE if not found
+    /// FIND (s -- a | F ) Search the dictionary for the token indexed through s.
+    /// Return its address or FALSE if not found
     pub fn f_find(&mut self) {
         let mut result = false;
+        let source_addr = pop!(self) as usize;
+        let mut link = self.data[self.here_ptr] as usize - 1;
         if stack_ok!(self, 1, "find") {
-            let source_addr = pop!(self) as usize;
-            let name_ptr = self.data[self.context_ptr] as usize; // top word's name field // compare length data
-            while name_ptr > 0 {
-                // NEED CODE TO WALK THE LINKS ***
-                if self.data[name_ptr] as usize & ADDRESS_MASK == self.strings[source_addr] as usize
+            link = self.data[link] as usize; // go back to the beginning of the top word
+            while link > 0 {
+                // name field is immediately after the link
+                if self.strings[self.data[link + 1] as usize & ADDRESS_MASK] as u8
+                    == self.strings[source_addr] as u8
                 {
-                    if self.u_str_equal(source_addr, self.data[name_ptr] as usize) {
+                    if self.u_str_equal(source_addr, self.data[link + 1] as usize) {
                         result = true;
                         break;
                     }
                 }
+                link = self.data[link] as usize;
             }
         }
-
-        push!(self, if result { TRUE } else { FALSE });
+        push!(
+            self,
+            if result {
+                (link as i64 + 1) as i64
+            } else {
+                FALSE
+            }
+        );
     }
 
     /// number? ( a -- n T | a F ) tests a string to see if it's a number;
@@ -170,11 +163,9 @@ impl TF {
     pub fn f_number_q(&mut self) {
         let buf_addr = pop!(self);
         let mut result = 0;
-        let mut flag = 0;
         let numtext = self.u_get_string(buf_addr as usize);
         if u_is_integer(&numtext.as_str()) {
             result = numtext.parse().unwrap();
-            flag = -1; // valid number
             push!(self, result);
             push!(self, TRUE);
         } else {
@@ -183,12 +174,10 @@ impl TF {
         }
     }
 
+    /// UNIQUE? (s -- a | F )
+    /// Checks the dictionary to see if the word pointed to is defined.
     pub fn f_q_unique(&mut self) {
-        // see if a word is unique. Result boolean on stack
-        match self.stack.pop() {
-            Some(v) => self.stack.push(TRUE),
-            None => self.stack.push(FALSE),
-        }
+        self.f_find();
     }
 
     /// ' (TICK) (b n -- a | 0 )
@@ -220,7 +209,7 @@ impl TF {
             let in_p = pop!(self);
             // traverse the string, dropping leading delim characters
             // in_p points *into* a string, so no count field
-            let start = in_p as usize + 1;
+            let start = in_p as usize;
             let end = start + buf_len as usize;
             let mut i = start as usize;
             let mut j = i;
@@ -237,7 +226,7 @@ impl TF {
         }
     }
 
-    /// TEXT ( -- ) Get a space-delimited token from the TIB, place in PAD
+    /// TEXT ( -- b u ) Get a space-delimited token from the TIB, place in PAD
     pub fn f_text(&mut self) {
         push!(self, ' ' as u8 as i64);
         self.f_parse();
@@ -248,9 +237,18 @@ impl TF {
     /// if delimiter = 1, get the rest of the TIB
     pub fn f_parse(&mut self) {
         if stack_ok!(self, 1, "parse") {
-            push!(self, (self.tib_in_ptr + self.tib_in_ptr) as i64);
-            push!(self, (self.tib_size_ptr - self.tib_in_ptr) as i64);
-            push!(self, ' ' as u8 as i64);
+            let delim: i64 = pop!(self);
+            push!(
+                // starting address in the string
+                self,
+                (self.tib_ptr + self.data[self.tib_in_ptr] as usize) as i64
+            );
+            push!(
+                // bytes available (length of input string)
+                self,
+                (self.data[self.tib_size_ptr] - self.data[self.tib_in_ptr]) as i64
+            );
+            push!(self, delim);
             self.f_parse_p();
             // check length, and copy to PAD if a token was found
             let delta = pop!(self);
@@ -258,9 +256,15 @@ impl TF {
             let addr = pop!(self);
             if length > 0 {
                 // copy to pad
-                self.u_str_copy((addr + delta) as usize, self.pad_ptr, length as usize);
+                self.u_str_copy(
+                    (addr + delta - 1) as usize,
+                    self.data[self.pad_ptr] as usize,
+                    length as usize,
+                );
             }
-            self.tib_in_ptr += length as usize;
+            self.data[self.tib_in_ptr] += delta + length;
+            push!(self, self.data[self.pad_ptr]);
+            push!(self, length);
         }
     }
 
@@ -283,13 +287,17 @@ impl TF {
     pub fn u_interpret(&mut self, line: &str) {
         // put it in TIB and call interpret?
         self.u_save_string(line, self.tib_ptr, line.len());
+        self.data[self.tib_size_ptr] = line.len() as i64 + 1; // add 1 for the count byte
+        self.data[self.tib_in_ptr] = 1;
+        push!(self, self.tib_ptr as i64);
         self.f_interpret();
     }
 
     /// Return a string slice from a Forth string address
+
     pub fn u_get_string(&mut self, addr: usize) -> String {
-        let str_addr = addr & ADDRESS_MASK;
-        let last = str_addr + self.strings[str_addr] as usize;
+        let str_addr = (addr & ADDRESS_MASK) + 1; //
+        let last = str_addr + self.strings[addr] as usize;
         let mut result = String::new();
         for i in str_addr..last {
             result.push(self.strings[i] as char);
@@ -301,8 +309,8 @@ impl TF {
     /// Typically used to copy to PAD from TIB
     pub fn u_str_copy(&mut self, from: usize, to: usize, length: usize) {
         self.strings[to] = length as u8 as char; // count byte
-        for i in 0..(length - 1) {
-            self.strings[to + i] = self.strings[from + i];
+        for i in 0..length {
+            self.strings[to + i + 1] = self.strings[from + i];
         }
     }
 
@@ -317,11 +325,11 @@ impl TF {
         true
     }
 
-    /// copy a string slice into string space as a counted string
+    /// copy a string slice into string space
     pub fn u_save_string(&mut self, from: &str, to: usize, length: usize) {
         self.strings[to] = length as u8 as char; // count byte
         for (i, c) in from.chars().enumerate() {
-            self.strings[i] = c;
+            self.strings[i + 1] = c;
         }
     }
 }

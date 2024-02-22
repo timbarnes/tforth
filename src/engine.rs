@@ -69,6 +69,7 @@ pub struct TF {
     pub pad_ptr: usize,    // the current s".."" string
     pub string_ptr: usize, // points to the beginning of free string space
     pub last_ptr: usize,   // points to name of top word
+    pub hld_ptr: usize,    // for numeric string work
     pub file_mode: FileMode,
     pub compile_ptr: usize, // true if compiling a word
     pub pc_ptr: usize,      // program counter
@@ -116,6 +117,7 @@ impl TF {
                 base_ptr: 0,
                 pad_ptr: 0,
                 last_ptr: 0,
+                hld_ptr: 0,
                 file_mode: FileMode::Unset,
                 compile_ptr: 0,
                 pc_ptr: 0,

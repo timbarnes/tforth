@@ -60,11 +60,8 @@ variable test-num 0 test-num !
  7 21 7 loop-test + + + + + + test-dual
  4 2 4 nested-loop-test - - - test-dual
  55 -2 loop-test 55 test-single
-\ 3 15 7 3 loop-test + + test-dual
-\ 0 0 0 loop-test test-single
-\ 1 64 10 1 loop+test * * test-dual
-\ -1 0 5 -1 leave-test test-dual
-
+3 3 3 loop-test + + test-dual
+0 0 loop-test test-single
 
 ."         Arithmetic"
 5 1 4 + test-single
@@ -115,9 +112,9 @@ false 55 0< test-single
 12 12 constant months months test-single \ a constant with the value 12
 
 ."        Application tests"
-\ 1 0 fac test-single
-\ 1 1 fac test-single
-\ 6 3 fac test-single
-\ 479001600 12 fac test-single 
+1 0 fac test-single
+1 1 fac test-single
+6 3 fac test-single
+479001600 12 fac test-single 
 
 test-results  \ Checks to see if all tests passed. Errors, if any, are left on the stack.

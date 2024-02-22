@@ -241,4 +241,8 @@ impl TF {
                 .push(self.return_stack[self.return_stack.len() - 2]);
         }
     }
+
+    pub fn f_recurse(&mut self) {
+        self.set_program_counter(0);
+    }
 }

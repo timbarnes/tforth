@@ -36,7 +36,7 @@ s" src/regression.fs"
 
 : _fac ( r n -- r )   \ Helper function that does most of the work.
     dup if 
-        tuck * swap 1 - recurse \ NOT YET IMPLEMENTED 
+        tuck * swap 1 - recurse 
     else 
         drop 
     then ;
