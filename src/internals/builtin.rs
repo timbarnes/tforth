@@ -370,7 +370,7 @@ impl TF {
         );
         self.u_add(
             "interpret",
-            TF::f_interpret,
+            TF::f_eval,
             "interpret: Interprets one line of Forth",
         );
         self.u_add(

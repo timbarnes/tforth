@@ -73,7 +73,7 @@ impl TF {
                 break;
             } else {
                 self.f_query();
-                self.f_interpret(); // interpret the contents of the line
+                self.f_eval(); // interpret the contents of the line
                 println!("ok");
             }
         }
@@ -100,33 +100,64 @@ impl TF {
     }
 
     /// INTERPRET ( -- ) Interprets a line of tokens from TIB
-    pub fn f_interpret(&mut self) {
+    pub fn f_eval(&mut self) {
         loop {
             self.f_text(); // get a token
             if pop!(self) != FALSE {
                 let v = top!(self);
                 push!(self, v); // dup PAD address
                 self.f_find(); // this is the name pointer's location
-                               // if we found it, execute it
-                let addr = pop!(self); // get the address
-                if addr != 0 {
-                    push!(self, addr + 1); // the inner interpreter's address
-                    self.f_execute();
+                if self.get_compile_mode() {
+                    self.f_d_compile();
                 } else {
-                    // is it a number?
-                    self.f_number_q();
-                    if pop!(self) == FALSE {
-                        pop!(self); // lose the failed number
-                        let word = &self.u_get_string(self.pad_ptr);
-                        self.msg
-                            .warning("interpret", "token not recognized", Some(word));
-                        break;
-                    }
+                    self.f_d_interpret(); // if we found it, execute it
                 }
             }
         }
     }
 
+    /// $COMPILE (s -- ) compiles a token whose string address is on the stack
+    ///            If not a word, try to convert to a number
+    ///            If not a number, ABORT.
+    pub fn f_d_compile(&mut self) {
+        if stack_ok!(self, 1, "$compile") {
+            let addr = top!(self);
+            push!(self, addr); // save the address for NUMBER?
+            if addr != 0 {
+                self.u_write_word(addr + 1); // add the token HERE
+            } else {
+                self.f_number_q();
+                if pop!(self) == FALSE {
+                    pop!(self); // lose the failed number
+                    let word = &self.u_get_string(self.pad_ptr);
+                    self.msg
+                        .warning("$interpret", "token not recognized", Some(word));
+                }
+            }
+        }
+    }
+
+    /// $INTERPRET ( s -- ) executes a token whose string address is on the stack.
+    ///            If not a word, try to convert to a number
+    ///            If not a number, ABORT.
+    pub fn f_d_interpret(&mut self) {
+        if stack_ok!(self, 1, "$interpret") {
+            let addr = top!(self);
+            push!(self, addr); // save the address for NUMBER?
+            if addr != 0 {
+                push!(self, addr + 1);
+                self.f_execute();
+            } else {
+                self.f_number_q();
+                if pop!(self) == FALSE {
+                    pop!(self); // lose the failed number
+                    let word = &self.u_get_string(self.pad_ptr);
+                    self.msg
+                        .warning("$interpret", "token not recognized", Some(word));
+                }
+            }
+        }
+    }
     /// FIND (s -- a | F ) Search the dictionary for the token indexed through s.
     /// Return its address or FALSE if not found
     pub fn f_find(&mut self) {
@@ -290,17 +321,26 @@ impl TF {
         self.data[self.tib_size_ptr] = line.len() as i64 + 1; // add 1 for the count byte
         self.data[self.tib_in_ptr] = 1;
         push!(self, self.tib_ptr as i64);
-        self.f_interpret();
+        self.f_eval();
+    }
+
+    /// u_write_word compiles a token into the current definition at HERE
+    ///              updating HERE afterwards
+    ///              the address of the (defined) word is on the stack
+    ///              we compile a pointer to the word's inner interpreter
+    pub fn u_write_word(&mut self, word_addr: i64) {
+        if stack_ok!(self, 1, "u-interpret") {
+            self.data[self.here_ptr] = word_addr;
+        }
     }
 
     /// Return a string slice from a Forth string address
-
     pub fn u_get_string(&mut self, addr: usize) -> String {
         let str_addr = (addr & ADDRESS_MASK) + 1; //
         let last = str_addr + self.strings[addr] as usize;
         let mut result = String::new();
         for i in str_addr..last {
-            result.push(self.strings[i] as char);
+            push!(self, self.strings[i] as i64);
         }
         result
     }

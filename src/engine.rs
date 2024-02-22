@@ -147,7 +147,7 @@ impl TF {
         self.add_variables();
     }
 
-    fn get_compile_mode(&mut self) -> bool {
+    pub fn get_compile_mode(&mut self) -> bool {
         if self.get_var(self.compile_ptr) == 0 {
             false
         } else {
