@@ -150,15 +150,21 @@ impl TF {
         println!("");
     }
 
+    /// s" ( -- ) get a string and place it in PAD
+    pub fn f_s_quote(&mut self) {
+        push!(self, '"' as i64);
+        self.f_parse();
+    }
+
     pub fn f_dot_s_quote(&mut self) {
-        print!("{:?}", self.get_string_var(self.pad_ptr));
+        print!("{:?}", self.get_string(self.pad_ptr));
     }
 
     pub fn f_type(&mut self) {
         // print a string, found via pointer on stack
         match self.stack.pop() {
             Some(addr) => {
-                let text = self.get_string_var(addr as usize);
+                let text = self.get_string(addr as usize);
                 print!("{text}");
             }
             None => {}

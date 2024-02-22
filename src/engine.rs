@@ -394,7 +394,7 @@ impl TF {
                     }
                     "s\"" => {
                         let tail: String = info.tail[1..info.tail.len() - 1].to_owned();
-                        self.set_string_var(self.pad_ptr, tail.as_str());
+                        self.set_string(self.pad_ptr, tail.as_str());
                     }
                     "variable" => {
                         // add it to the dictionary
@@ -602,7 +602,7 @@ impl TF {
     pub fn loaded(&mut self) {
         // Load a file of forth code. Initial implementation is not intended to be recursive.
         // attempt to open the file, return an error if not possible
-        let file_name = self.get_string_var(self.pad_ptr);
+        let file_name = self.get_string(self.pad_ptr);
         self.load_file(&file_name);
     }
 

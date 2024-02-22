@@ -1,6 +1,9 @@
 // Compiler and Interpreter
 
-use crate::engine::{ADDRESS_MASK, FALSE, IMMEDIATE_MASK, STACK_START, TF, TRUE};
+use crate::engine::{
+    ADDRESS_MASK, BUILTIN, CONSTANT, DEFINITION, FALSE, IMMEDIATE_MASK, LITERAL, STACK_START,
+    STRING, TF, TRUE, VARIABLE,
+};
 use crate::tokenizer::u_is_integer;
 
 macro_rules! stack_ok {
@@ -67,31 +70,45 @@ impl TF {
             if self.should_exit() {
                 break;
             } else {
-                self.stack.push(132);
-                self.f_accept(); // get a line from the terminal
+                self.f_query();
                 self.f_interpret(); // interpret the contents of the line
                 println!("ok");
             }
         }
     }
 
+    /// EXECUTE interpret a word with addr on the stack
+    /// stack value is the address of an inner interpreter
     pub fn f_execute(&mut self) {
-        // execute a word with addr on the stack
-        match self.stack.pop() {
-            Some(addr) => {
-                if addr < 999 {
-                    self.execute_word(addr as usize);
-                } else {
-                    self.execute_builtin(addr as usize - 1000);
-                }
+        if stack_ok!(self, 1, "execute") {
+            // call the appropriate inner interpreter
+            let xt = pop!(self);
+            match xt {
+                BUILTIN => self.i_builtin(xt + 1),
+                VARIABLE => self.i_variable(xt + 1),
+                CONSTANT => self.i_constant(xt + 1),
+                LITERAL => self.i_literal(xt + 1),
+                STRING => self.i_string(xt + 1),
+                DEFINITION => self.i_definition(xt + 1),
+                _ => self
+                    .msg
+                    .error("execute", "Unknown inner interpreter", Some(xt)),
             }
-            None => {}
         }
     }
 
     /// INTERPRET ( -- ) Interprets a line of tokens from TIB
     pub fn f_interpret(&mut self) {
         loop {
+            self.f_parse(); // get a token
+            if pop!(self) != 0 {
+                // look it up and execute it
+                self.f_tick();
+                self.f_execute();
+            } else {
+                break;
+            }
+
             if self.get_var(self.tib_in_ptr) >= self.get_var(self.tib_size_ptr) {
                 // no more tokens on this line
                 return;
@@ -126,13 +143,35 @@ impl TF {
         }
     }
 
+    /// FIND (s -- a | F )
+    /// Search the dictionary for the token indexed through s. Return it's address or FALSE if not found
+    pub fn f_find(&mut self) {
+        let mut result = false;
+        if stack_ok!(self, 1, "find") {
+            let source_addr = pop!(self) as usize;
+            let name_ptr = self.data[self.context_ptr] as usize; // top word's name field // compare length data
+            while name_ptr > 0 {
+                // NEED CODE TO WALK THE LINKS ***
+                if self.data[name_ptr] as usize & ADDRESS_MASK == self.strings[source_addr] as usize
+                {
+                    if self.u_str_equal(source_addr, self.data[name_ptr] as usize) {
+                        result = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        push!(self, if result { TRUE } else { FALSE });
+    }
+
     /// number? ( a -- n T | a F ) tests a string to see if it's a number;
     /// leaves n and flag on the stack: true if number is ok.
     pub fn f_number_q(&mut self) {
         let buf_addr = pop!(self);
         let mut result = 0;
         let mut flag = 0;
-        let numtext = self.u_get_string_var(buf_addr as usize);
+        let numtext = self.u_get_string(buf_addr as usize);
         if u_is_integer(&numtext.as_str()) {
             result = numtext.parse().unwrap();
             flag = -1; // valid number
@@ -152,17 +191,21 @@ impl TF {
         }
     }
 
-    /// looks for a (postfix) word in the dictionary
+    /// ' (TICK) (b n -- a | 0 )
+    /// Looks for a (postfix) word in the dictionary
     /// places it's execution token / address on the stack
     /// builtin addresses have been bumped up by 1000 to distinguish them
     /// Pushes 0 if not found
     pub fn f_tick(&mut self) {
-        self.f_s_quote(); // gets a string and places it in PAD
-                          // search the dictionary
-        let token = self.get_string_var(self.pad_ptr);
-        match self.find(&token) {
-            Some(idx) => self.stack.push(idx as i64),
-            None => self.stack.push(0),
+        // *** get a string from the user (via TEXT?) and put addr on stack
+        self.f_find(); // look for it
+        if top!(self) == FALSE {
+            // write an error message
+            let mut msg = self.get_string(self.pad_ptr);
+            msg = format!("Word not found: {}", msg);
+            self.set_string(self.pad_ptr, &msg);
+            push!(self, self.pad_ptr as i64);
+            self.f_type(); // a warning message
         }
     }
 
@@ -244,7 +287,7 @@ impl TF {
     }
 
     /// Return a string slice from a Forth string address
-    fn u_get_string_var(&mut self, addr: usize) -> String {
+    fn u_get_string(&mut self, addr: usize) -> String {
         let str_addr = addr & ADDRESS_MASK;
         let last = str_addr + self.strings[str_addr] as usize;
         let mut result = String::new();
@@ -261,6 +304,17 @@ impl TF {
         for i in 0..(length - 1) {
             self.strings[to + i] = self.strings[from + i];
         }
+    }
+
+    /// Compare two Forth (counted) strings
+    /// First byte is the length, so we'll bail quickly if they don't match
+    pub fn u_str_equal(&mut self, s_addr1: usize, s_addr2: usize) -> bool {
+        for i in 0..self.strings[s_addr1] as usize {
+            if self.strings[s_addr1 + i] != self.strings[s_addr2 + i] {
+                return false;
+            }
+        }
+        true
     }
 
     /// copy a string slice into string space as a counted string

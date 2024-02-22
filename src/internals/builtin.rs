@@ -6,6 +6,35 @@
 use crate::engine::{BUILTIN, STR_START, TF, TIB_START, VARIABLE};
 use crate::tokenizer::ForthToken;
 
+macro_rules! pop {
+    ($self:ident) => {{
+        $self.stack_ptr += 1;
+        $self.data[$self.stack_ptr - 1]
+    }};
+}
+macro_rules! top {
+    ($self:ident) => {{
+        $self.data[$self.stack_ptr]
+    }};
+}
+macro_rules! push {
+    ($self:ident, $val:expr) => {
+        $self.stack_ptr -= 1;
+        $self.data[$self.stack_ptr] = $val;
+    };
+}
+macro_rules! stack_ok {
+    ($self:ident, $n: expr, $caller: expr) => {
+        if $self.stack_ptr <= STACK_START - $n {
+            true
+        } else {
+            $self.msg.error($caller, "Stack underflow", None::<bool>);
+            $self.f_abort();
+            false
+        }
+    };
+}
+
 pub trait BuiltinCall {
     fn call(&mut self);
 }
@@ -151,19 +180,6 @@ impl TF {
     }
 
     pub fn add_builtins(&mut self) {
-        // add the inner interpreters to the builtin dictionary
-        self.add("i_builtin", TF::i_builtin, "inner interpreter: builtin");
-        self.add("i_variable", TF::i_variable, "inner interpreter: variablek");
-        self.add("i_constant", TF::i_constant, "inner interpreter: constant");
-        self.add("i_literal", TF::i_literal, "inner interpreter: literal");
-        self.add("i_string", TF::i_string, "inner interpreter: string");
-        self.add(
-            "i_definition",
-            TF::i_definition,
-            "inner interpreter: definition",
-        );
-
-        // add standard builtin functions to the dictionary
         self.add("+", TF::f_plus, "+ ( j k -- j+k ) Push j+k on the stack");
         self.add("-", TF::f_minus, "- ( j k -- j+k ) Push j-k on the stack");
         self.add("*", TF::f_times, "* ( j k -- j-k ) Push  -k on the stack");
@@ -367,6 +383,12 @@ impl TF {
             "?unique ( a -- b ) tests to see if the name TOS points to is in the dictionary",
         );
         self.add(
+            "find",
+            TF::f_find,
+            "FIND (s -- a | F ) Search the dictionary for the token indexed through s. 
+        Return it's address or FALSE if not found",
+        );
+        self.add(
             "'",
             TF::f_tick,
             "' (tick): searches the dictionary for a (postfix) word",
@@ -403,12 +425,6 @@ impl TF {
             TF::f_type,
             "type: print a string using pointer on stack",
         );
-    }
-
-    pub fn f_s_quote(&mut self) {
-        // get a string and place it in PAD
-        self.stack.push(' ' as i64);
-        self.f_text(); // gets the string
     }
 
     /// ADD SYSTEM VARIABLES
@@ -472,7 +488,7 @@ impl TF {
         }
     }
 
-    pub fn get_string_var(&mut self, addr: usize) -> String {
+    pub fn get_string(&mut self, addr: usize) -> String {
         // gets the current value of the variable at addr
         let address = addr.max(0) as usize;
         if address < self.dictionary.len() {
@@ -492,7 +508,7 @@ impl TF {
         }
     }
 
-    pub fn set_string_var(&mut self, addr: usize, new_val: &str) {
+    pub fn set_string(&mut self, addr: usize, new_val: &str) {
         // set the variable at addr to val
         let address = addr.max(0) as usize;
         if address < self.dictionary.len() {
